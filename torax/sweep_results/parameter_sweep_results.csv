@@ -1,0 +1,4 @@
+Ip_MA,P_MW,Ic_MA,success,runtime_seconds,output_file
+15.0,20,0.0,False,15.54,
+15.0,40,0.0,False,16.21,
+15.0,60,0.0,False,18.34,

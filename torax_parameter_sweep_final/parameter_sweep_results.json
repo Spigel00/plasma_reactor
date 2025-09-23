@@ -1,0 +1,92 @@
+[
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 10,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P010.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 20,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P020.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 30,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P030.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 40,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P040.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 50,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P050.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 60,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P060.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 70,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P070.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 80,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P080.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 90,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P090.py"
+  },
+  {
+    "Ip_MA": 15.0,
+    "P_MW": 100,
+    "Ic_MA": 0.0,
+    "success": false,
+    "runtime_seconds": 0.1,
+    "output_file": null,
+    "config_file": "config_Ip15_P100.py"
+  }
+]
