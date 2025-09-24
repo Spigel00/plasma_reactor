@@ -59,14 +59,16 @@ Thumbs.db
 temp/
 tmp/
 
-# Large data files (uncomment if needed)
-# *.nc
-# *.h5
-# *.hdf5
+# Generated data files (keep sample files in data/)
+outputs/generated_*
+**/analysis_output/
+**/sweep_results/
 
-# Model files (uncomment if you want to exclude trained models)
-# *.pkl
-# *.joblib
+# Generated plots (keep examples in outputs/)
+plots/generated_*
+
+# Model checkpoints during training
+models/checkpoints/
 
 # Logs
 *.log
