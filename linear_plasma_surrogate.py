@@ -4,7 +4,7 @@ import numpy as np
 class LinearPlasmaSurrogate:
     """Fast linear surrogate model for plasma control."""
     
-    def __init__(self, model_path="linear_surrogate_model.pkl"):
+    def __init__(self, model_path="models/linear_surrogate_model.pkl"):
         """Initialize surrogate model."""
         with open(model_path, 'rb') as f:
             self.models = pickle.load(f)
