@@ -1,304 +1,125 @@
-#!/usr/bin/env python3#!/usr/bin/env python3
+#!/usr/bin/env python3
+"""
+Complete Plasma Physics Analysis - Clean Version
 
-""""""
+This script performs Steps 2 and 3 of the plasma analysis.
+"""
 
-Complete Plasma Physics Analysis and Surrogate Model DevelopmentComplete Plasma Physics Analysis and Surrogate Model Development
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import xarray as xr
+from pathlib import Path
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score, mean_squared_error
+from scipy import stats
+import pickle
+import json
+from datetime import datetime
 
-
-
-This script performs:This script performs:
-
-Step 2: Deep analysis of plasma dynamics with all key variablesStep 2: Deep analysis of plasma dynamics with all key variables
-
-Step 3: Linear surrogate model for coil current controlStep 3: Linear surrogate model for coil current control
-
-""""""
-
-
-
-import numpy as npimport numpy as np
-
-import pandas as pdimport pandas as pd
-
-import matplotlib.pyplot as pltimport matplotlib.pyplot as plt
-
-import matplotlib.gridspec as gridspecimport matplotlib.gridspec as gridspec
-
-import xarray as xrimport xarray as xr
-
-from pathlib import Pathfrom pathlib import Path
-
-from sklearn.linear_model import LinearRegression, Ridgefrom sklearn.linear_model import LinearRegression, Ridge
-
-from sklearn.preprocessing import StandardScalerfrom sklearn.preprocessing import StandardScaler
-
-from sklearn.metrics import r2_score, mean_squared_errorfrom sklearn.metrics import r2_score, mean_squared_error
-
-from scipy import signal, statsfrom scipy import signal, stats
-
-import pickleimport pickle
-
-import jsonimport json
-
-from datetime import datetimefrom datetime import datetime
-
-
-
-class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
-
-    """Complete plasma physics analyzer with surrogate modeling."""    """Complete plasma physics analyzer with surrogate modeling."""
-
+class CompletePlasmaAnalyzer:
+    """Complete plasma physics analyzer with surrogate modeling."""
+    
+    def __init__(self, netcdf_file='data/synthetic_complete_physics.nc'):
+        """Initialize with physics data file."""
+        self.physics_file = netcdf_file
+        self.ds = None
+        self.analysis_results = {}
         
-
-    def __init__(self, physics_file='data/synthetic_complete_physics.nc'):    def __init__(self, physics_file='data/synthetic_complete_physics.nc'):
-
-        """Initialize with physics data file."""        """Initialize with physics data file."""
-
-        self.physics_file = physics_file        self.physics_file = physics_file
-
-        self.ds = None        self.ds = None
-
-        self.analysis_results = {}        self.analysis_results = {}
-
-        self.surrogate_model = None        self.surrogate_model = None
-
-                
-
-        # Create output directories        # Create output directories
-
-        self.analysis_dir = Path('outputs')        self.analysis_dir = Path('physics_analysis')
-
-        self.surrogate_dir = Path('models')        self.surrogate_dir = Path('linear_surrogate')
-
-                
-
-        for dir_path in [self.analysis_dir, self.surrogate_dir]:        for dir_path in [self.analysis_dir, self.surrogate_dir]:
-
-            dir_path.mkdir(exist_ok=True)            dir_path.mkdir(exist_ok=True)
-
+        # Create output directories
+        self.analysis_dir = Path('outputs')
+        self.surrogate_dir = Path('models')
         
-
-    def load_physics_data(self):    def load_physics_data(self):
-
-        """Load and verify physics data."""        """Load and verify physics data."""
-
-                
-
-        print("LOADING COMPLETE PHYSICS DATA")        print("LOADING COMPLETE PHYSICS DATA")
-
-        print("="*50)        print("="*50)
-
-                
-
-        try:        try:
-
-            self.ds = xr.open_dataset(self.physics_file)            self.ds = xr.open_dataset(self.physics_file)
-
-            print(f"✓ Loaded: {self.physics_file}")            print(f"✓ Loaded: {self.physics_file}")
-
-            print(f"  Variables: {len(self.ds.data_vars)}")            print(f"  Variables: {len(self.ds.data_vars)}")
-
-            print(f"  Time points: {len(self.ds.time)}")            print(f"  Time points: {len(self.ds.time)}")
-
-            print(f"  Radial points: {len(self.ds.rho_cell_norm)}")            print(f"  Radial points: {len(self.ds.rho_cell_norm)}")
-
-            print(f"  Time range: {float(self.ds.time[0]):.2f} - {float(self.ds.time[-1]):.2f} s")            print(f"  Time range: {float(self.ds.time[0]):.2f} - {float(self.ds.time[-1]):.2f} s")
-
-                        
-
-            # Check key variables            # Check key variables
-
-            required_vars = ['temp_el', 'temp_ion', 'ne', 'Ip', 'q', 'elongation', 'triangularity']            required_vars = ['temp_el', 'temp_ion', 'ne', 'Ip', 'q', 'elongation', 'triangularity']
-
-            missing_vars = [var for var in required_vars if var not in self.ds.data_vars]            missing_vars = [var for var in required_vars if var not in self.ds.data_vars]
-
-            if missing_vars:            if missing_vars:
-
-                print(f"⚠ Missing variables: {missing_vars}")                print(f"⚠ Missing variables: {missing_vars}")
-
-            else:            else:
-
-                print("✓ All key physics variables present")                print("✓ All key physics variables present")
-
-                        
-
-            return True            return True
-
-                        
-
-        except Exception as e:        except Exception as e:
-
-            print(f"✗ Error loading data: {e}")            print(f"✗ Error loading data: {e}")
-
-            return False            return False
-
+        for dir_path in [self.analysis_dir, self.surrogate_dir]:
+            dir_path.mkdir(exist_ok=True)
+    
+    def load_physics_data(self):
+        """Load and verify physics data."""
         
-
-    def step2_analyze_plasma_dynamics(self):    def step2_analyze_plasma_dynamics(self):
-
-        """Step 2: Comprehensive analysis of plasma dynamics."""        """Step 2: Comprehensive analysis of plasma dynamics."""
-
-                
-
-        print("STEP 2: ANALYZING PLASMA DYNAMICS")        print("STEP 2: ANALYZING PLASMA DYNAMICS")
-
-        print("="*50)        print("="*50)
-
-                
-
-        if self.ds is None:        if self.ds is None:
-
-            print("Error: No physics data loaded")            print("Error: No physics data loaded")
-
-            return False            return False
-
-                
-
-        # Extract key variables        # Extract key variables
-
-        time = self.ds.time.values        time = self.ds.time.values
-
-        rho = self.ds.rho_cell_norm.values        rho = self.ds.rho_cell_norm.values
-
-                
-
-        # Time series analysis        # Time series analysis
-
-        self._analyze_time_evolution(time)        self._analyze_time_evolution(time)
-
-                
-
-        # Profile analysis        # Profile analysis
-
-        self._analyze_radial_profiles(time, rho)        self._analyze_radial_profiles(time, rho)
-
-                
-
-        # Correlation analysis        # Correlation analysis
-
-        self._analyze_correlations()        self._analyze_correlations()
-
-                
-
-        # Stability analysis        # Stability analysis
-
-        self._analyze_stability_patterns(time)        self._analyze_stability_patterns(time)
-
-                
-
-        # Create comprehensive visualization        # Create comprehensive visualization
-
-        self._create_comprehensive_plots()        self._create_comprehensive_plots()
-
-                
-
-        print("✓ Step 2 complete: Plasma dynamics analyzed")        print("✓ Step 2 complete: Plasma dynamics analyzed")
-
-        return True        return True
-
+        print("LOADING COMPLETE PHYSICS DATA")
+        print("="*50)
         
-
-    def _analyze_time_evolution(self, time):    def _analyze_time_evolution(self, time):
-
-        """Analyze time evolution of key parameters."""        """Analyze time evolution of key parameters."""
-
-                
-
-        print("Analyzing time evolution...")        print("Analyzing time evolution...")
-
-                
-
-        # Extract time series        # Extract time series
-
-        Te_avg = self.ds.temp_el.mean(dim='rho_cell_norm')        Te_avg = self.ds.temp_el.mean(dim='rho_cell_norm')
-
-        Ti_avg = self.ds.temp_ion.mean(dim='rho_cell_norm')        Ti_avg = self.ds.temp_ion.mean(dim='rho_cell_norm')
-
-        ne_avg = self.ds.ne.mean(dim='rho_cell_norm')        ne_avg = self.ds.ne.mean(dim='rho_cell_norm')
-
-        Ip = self.ds.Ip        Ip = self.ds.Ip
-
-                
-
-        # Shape metrics        # Shape metrics
-
-        elongation = self.ds.elongation        elongation = self.ds.elongation
-
-        triangularity = self.ds.triangularity        triangularity = self.ds.triangularity
-
-        R_centroid = self.ds.R_centroid        R_centroid = self.ds.R_centroid
-
-        Z_centroid = self.ds.Z_centroid        Z_centroid = self.ds.Z_centroid
-
-                
-
-        # Control variables        # Control variables
-
-        coil_currents = np.column_stack([        coil_currents = np.column_stack([
-
-            self.ds[f'coil_current_{i}'].values for i in range(1, 5)            self.ds[f'coil_current_{i}'].values for i in range(1, 5)
-
-        ])        ])
-
-                
-
-        # Store for analysis        # Store for analysis
-
-        self.analysis_results['time_evolution'] = {        self.analysis_results['time_evolution'] = {
-
-            'time': time,            'time': time,
-
-            'Te_avg': Te_avg.values,            'Te_avg': Te_avg.values,
-
-            'Ti_avg': Ti_avg.values,            'Ti_avg': Ti_avg.values,
-
-            'ne_avg': ne_avg.values,            'ne_avg': ne_avg.values,
-
-            'Ip': Ip.values,            'Ip': Ip.values,
-
-            'elongation': elongation.values,            'elongation': elongation.values,
-
-            'triangularity': triangularity.values,            'triangularity': triangularity.values,
-
-            'R_centroid': R_centroid.values,            'R_centroid': R_centroid.values,
-
-            'Z_centroid': Z_centroid.values,            'Z_centroid': Z_centroid.values,
-
-            'coil_currents': coil_currents,            'coil_currents': coil_currents,
-
-        }        }
-
-                
-
-        # Calculate trends        # Calculate trends
-
-        trends = {}        trends = {}
-
-        for var_name, data in [('Te_avg', Te_avg.values), ('Ip', Ip.values),         for var_name, data in [('Te_avg', Te_avg.values), ('Ip', Ip.values), 
-
-                              ('elongation', elongation.values)]:                              ('elongation', elongation.values)]:
-
-            slope, intercept, r_value, _, _ = stats.linregress(time, data)            slope, intercept, r_value, _, _ = stats.linregress(time, data)
-
-            trends[var_name] = {'slope': slope, 'r_squared': r_value**2}            trends[var_name] = {'slope': slope, 'r_squared': r_value**2}
-
-                
-
-        self.analysis_results['trends'] = trends        self.analysis_results['trends'] = trends
-
-        print(f"  Analyzed {len(trends)} time series trends")        print(f"  Analyzed {len(trends)} time series trends")
-
+        try:
+            self.ds = xr.open_dataset(self.physics_file)
+            print(f"✓ Loaded: {self.physics_file}")
+            print(f"  Variables: {len(self.ds.data_vars)}")
+            print(f"  Time points: {len(self.ds.time)}")
+            print(f"  Time range: {float(self.ds.time[0]):.2f} - {float(self.ds.time[-1]):.2f} s")
+            
+            return True
+            
+        except Exception as e:
+            print(f"✗ Error loading data: {e}")
+            return False
+    
+    def step2_analyze_plasma_dynamics(self):
+        """Step 2: Comprehensive analysis of plasma dynamics."""
         
-
-    def _analyze_radial_profiles(self, time, rho):    def _analyze_radial_profiles(self, time, rho):
-
-        """Analyze radial profiles."""        """Analyze radial profiles."""
-
-                
-
-        print("Analyzing radial profiles...")        print("Analyzing radial profiles...")\n        \n        # Select representative time slices\n        n_slices = 5\n        time_indices = np.linspace(0, len(time)-1, n_slices, dtype=int)\n        \n        profiles = {}\n        for t_idx in time_indices:\n            t_val = time[t_idx]\n            \n            profiles[f't_{t_val:.1f}s'] = {\n                'time': t_val,\n                'Te': self.ds.temp_el[t_idx, :].values,\n                'Ti': self.ds.temp_ion[t_idx, :].values,\n                'ne': self.ds.ne[t_idx, :].values,\n                'q': self.ds.q[t_idx, :].values,\n                'jtot': self.ds.jtot[t_idx, :].values,\n            }\n        \n        self.analysis_results['radial_profiles'] = {\n            'rho': rho,\n            'profiles': profiles\n        }\n        \n        print(f\"  Analyzed profiles at {len(profiles)} time slices\")\n    \n    def _analyze_correlations(self):\n        \"\"\"Analyze correlations between control and response variables.\"\"\"\n        \n        print(\"Analyzing control-response correlations...\")\n        \n        # Prepare data for correlation analysis\n        control_data = {\n            'coil_1': self.ds.coil_current_1.values,\n            'coil_2': self.ds.coil_current_2.values,\n            'coil_3': self.ds.coil_current_3.values,\n            'coil_4': self.ds.coil_current_4.values,\n        }\n        \n        response_data = {\n            'R_centroid': self.ds.R_centroid.values,\n            'Z_centroid': self.ds.Z_centroid.values,\n            'elongation': self.ds.elongation.values,\n            'triangularity': self.ds.triangularity.values,\n            'Te_avg': self.ds.temp_el.mean(dim='rho_cell_norm').values,\n            'Ip': self.ds.Ip.values,\n        }\n        \n        # Calculate correlation matrix\n        all_data = {**control_data, **response_data}\n        df = pd.DataFrame(all_data)\n        correlation_matrix = df.corr()\n        \n        # Extract control-response correlations\n        control_response_corr = {}\n        for control in control_data.keys():\n            control_response_corr[control] = {}\n            for response in response_data.keys():\n                corr_val = correlation_matrix.loc[control, response]\n                control_response_corr[control][response] = corr_val\n        \n        self.analysis_results['correlations'] = {\n            'full_matrix': correlation_matrix,\n            'control_response': control_response_corr\n        }\n        \n        print(f\"  Calculated correlations for {len(control_data)} controls and {len(response_data)} responses\")\n    \n    def _analyze_stability_patterns(self, time):\n        \"\"\"Analyze stability and dynamic patterns.\"\"\"\n        \n        print(\"Analyzing stability patterns...\")\n        \n        stability_metrics = {}\n        \n        # Analyze key variables for stability\n        variables = {\n            'Ip': self.ds.Ip.values,\n            'Te_avg': self.ds.temp_el.mean(dim='rho_cell_norm').values,\n            'elongation': self.ds.elongation.values,\n            'beta_n': self.ds.P_heat.values / (self.ds.Ip.values * 5.3)  # Approximate beta_N\n        }\n        \n        for var_name, data in variables.items():\n            # Calculate stability metrics\n            std_dev = np.std(data)\n            mean_val = np.mean(data)\n            cv = std_dev / mean_val if mean_val != 0 else 0  # Coefficient of variation\n            \n            # Detect oscillations using FFT\n            fft = np.fft.fft(data - np.mean(data))\n            freqs = np.fft.fftfreq(len(data), d=time[1] - time[0])\n            power_spectrum = np.abs(fft)**2\n            \n            # Find dominant frequency\n            dominant_freq_idx = np.argmax(power_spectrum[1:len(power_spectrum)//2]) + 1\n            dominant_freq = freqs[dominant_freq_idx]\n            \n            stability_metrics[var_name] = {\n                'std_dev': std_dev,\n                'cv': cv,\n                'dominant_freq': dominant_freq,\n                'oscillation_amplitude': np.sqrt(power_spectrum[dominant_freq_idx])\n            }\n        \n        self.analysis_results['stability'] = stability_metrics\n        print(f\"  Analyzed stability for {len(stability_metrics)} variables\")\n    \n    def _create_comprehensive_plots(self):\n        \"\"\"Create comprehensive analysis visualizations.\"\"\"\n        \n        print(\"Creating comprehensive analysis plots...\")\n        \n        # Create multi-panel figure\n        fig = plt.figure(figsize=(20, 15))\n        gs = gridspec.GridSpec(4, 5, figure=fig, hspace=0.3, wspace=0.3)\n        \n        # Time evolution plots (top row)\n        time = self.analysis_results['time_evolution']['time']\n        \n        # Temperature evolution\n        ax1 = fig.add_subplot(gs[0, 0])\n        ax1.plot(time, self.analysis_results['time_evolution']['Te_avg'], 'r-', label='Te avg', linewidth=2)\n        ax1.plot(time, self.analysis_results['time_evolution']['Ti_avg'], 'b-', label='Ti avg', linewidth=2)\n        ax1.set_xlabel('Time (s)')\n        ax1.set_ylabel('Temperature (keV)')\n        ax1.set_title('Temperature Evolution')\n        ax1.legend()\n        ax1.grid(True, alpha=0.3)\n        \n        # Plasma current and density\n        ax2 = fig.add_subplot(gs[0, 1])\n        ax2_twin = ax2.twinx()\n        line1 = ax2.plot(time, self.analysis_results['time_evolution']['Ip'], 'g-', linewidth=2, label='Ip')\n        line2 = ax2_twin.plot(time, self.analysis_results['time_evolution']['ne_avg'], 'orange', linewidth=2, label='ne avg')\n        ax2.set_xlabel('Time (s)')\n        ax2.set_ylabel('Plasma Current (MA)', color='g')\n        ax2_twin.set_ylabel('Density (10^19 m^-3)', color='orange')\n        ax2.set_title('Current & Density')\n        ax2.grid(True, alpha=0.3)\n        \n        # Shape metrics\n        ax3 = fig.add_subplot(gs[0, 2])\n        ax3.plot(time, self.analysis_results['time_evolution']['elongation'], 'purple', linewidth=2, label='κ')\n        ax3_twin = ax3.twinx()\n        ax3_twin.plot(time, self.analysis_results['time_evolution']['triangularity'], 'brown', linewidth=2, label='δ')\n        ax3.set_xlabel('Time (s)')\n        ax3.set_ylabel('Elongation κ', color='purple')\n        ax3_twin.set_ylabel('Triangularity δ', color='brown')\n        ax3.set_title('Shape Metrics')\n        ax3.grid(True, alpha=0.3)\n        \n        # Centroid positions\n        ax4 = fig.add_subplot(gs[0, 3])\n        ax4.plot(time, self.analysis_results['time_evolution']['R_centroid'], 'red', linewidth=2, label='R')\n        ax4_twin = ax4.twinx()\n        ax4_twin.plot(time, self.analysis_results['time_evolution']['Z_centroid'], 'blue', linewidth=2, label='Z')\n        ax4.set_xlabel('Time (s)')\n        ax4.set_ylabel('R centroid (m)', color='red')\n        ax4_twin.set_ylabel('Z centroid (m)', color='blue')\n        ax4.set_title('Centroid Position')\n        ax4.grid(True, alpha=0.3)\n        \n        # Coil currents\n        ax5 = fig.add_subplot(gs[0, 4])\n        coil_currents = self.analysis_results['time_evolution']['coil_currents']\n        colors = ['red', 'blue', 'green', 'orange']\n        for i in range(4):\n            ax5.plot(time, coil_currents[:, i], colors[i], linewidth=2, label=f'Coil {i+1}')\n        ax5.set_xlabel('Time (s)')\n        ax5.set_ylabel('Current (kA)')\n        ax5.set_title('Coil Currents')\n        ax5.legend()\n        ax5.grid(True, alpha=0.3)\n        \n        # Radial profiles (second row)\n        rho = self.analysis_results['radial_profiles']['rho']\n        profiles = self.analysis_results['radial_profiles']['profiles']\n        \n        # Temperature profiles\n        ax6 = fig.add_subplot(gs[1, 0])\n        for i, (time_key, profile) in enumerate(profiles.items()):\n            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)\n            ax6.plot(rho, profile['Te'], 'r-', alpha=alpha, linewidth=2, label=f'Te {time_key}')\n            ax6.plot(rho, profile['Ti'], 'b--', alpha=alpha, linewidth=2, label=f'Ti {time_key}')\n        ax6.set_xlabel('ρ')\n        ax6.set_ylabel('Temperature (keV)')\n        ax6.set_title('Temperature Profiles')\n        ax6.legend(bbox_to_anchor=(1.05, 1), loc='upper left')\n        ax6.grid(True, alpha=0.3)\n        \n        # Density profiles\n        ax7 = fig.add_subplot(gs[1, 1])\n        for i, (time_key, profile) in enumerate(profiles.items()):\n            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)\n            ax7.plot(rho, profile['ne'], 'orange', alpha=alpha, linewidth=2, label=f'ne {time_key}')\n        ax7.set_xlabel('ρ')\n        ax7.set_ylabel('Density (10^19 m^-3)')\n        ax7.set_title('Density Profiles')\n        ax7.grid(True, alpha=0.3)\n        \n        # Safety factor profiles\n        ax8 = fig.add_subplot(gs[1, 2])\n        for i, (time_key, profile) in enumerate(profiles.items()):\n            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)\n            ax8.plot(rho, profile['q'], 'purple', alpha=alpha, linewidth=2, label=f'q {time_key}')\n        ax8.set_xlabel('ρ')\n        ax8.set_ylabel('Safety Factor q')\n        ax8.set_title('q Profiles')\n        ax8.grid(True, alpha=0.3)\n        \n        # Current density profiles\n        ax9 = fig.add_subplot(gs[1, 3])\n        for i, (time_key, profile) in enumerate(profiles.items()):\n            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)\n            ax9.plot(rho, profile['jtot'], 'green', alpha=alpha, linewidth=2, label=f'j {time_key}')\n        ax9.set_xlabel('ρ')\n        ax9.set_ylabel('Current Density (MA/m²)')\n        ax9.set_title('Current Density Profiles')\n        ax9.grid(True, alpha=0.3)\n        \n        # Correlation matrix\n        ax10 = fig.add_subplot(gs[1, 4])\n        corr_matrix = self.analysis_results['correlations']['full_matrix']\n        im = ax10.imshow(corr_matrix.values, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')\n        ax10.set_xticks(range(len(corr_matrix.columns)))\n        ax10.set_yticks(range(len(corr_matrix.index)))\n        ax10.set_xticklabels(corr_matrix.columns, rotation=45, ha='right')\n        ax10.set_yticklabels(corr_matrix.index)\n        ax10.set_title('Correlation Matrix')\n        plt.colorbar(im, ax=ax10, shrink=0.6)\n        \n        # Control-response analysis (third row)\n        control_response = self.analysis_results['correlations']['control_response']\n        \n        # Coil 1 responses\n        ax11 = fig.add_subplot(gs[2, 0])\n        responses = list(control_response['coil_1'].keys())\n        values = list(control_response['coil_1'].values())\n        bars = ax11.bar(responses, values, color='lightblue', alpha=0.7)\n        ax11.set_title('Coil 1 Response Correlations')\n        ax11.set_ylabel('Correlation')\n        ax11.tick_params(axis='x', rotation=45)\n        ax11.grid(True, alpha=0.3, axis='y')\n        \n        # Highlight strongest correlations\n        max_idx = np.argmax(np.abs(values))\n        bars[max_idx].set_color('red')\n        \n        # Coil 2 responses\n        ax12 = fig.add_subplot(gs[2, 1])\n        values = list(control_response['coil_2'].values())\n        bars = ax12.bar(responses, values, color='lightgreen', alpha=0.7)\n        ax12.set_title('Coil 2 Response Correlations')\n        ax12.set_ylabel('Correlation')\n        ax12.tick_params(axis='x', rotation=45)\n        ax12.grid(True, alpha=0.3, axis='y')\n        max_idx = np.argmax(np.abs(values))\n        bars[max_idx].set_color('green')\n        \n        # Coil 3 responses\n        ax13 = fig.add_subplot(gs[2, 2])\n        values = list(control_response['coil_3'].values())\n        bars = ax13.bar(responses, values, color='lightsalmon', alpha=0.7)\n        ax13.set_title('Coil 3 Response Correlations')\n        ax13.set_ylabel('Correlation')\n        ax13.tick_params(axis='x', rotation=45)\n        ax13.grid(True, alpha=0.3, axis='y')\n        max_idx = np.argmax(np.abs(values))\n        bars[max_idx].set_color('red')\n        \n        # Coil 4 responses\n        ax14 = fig.add_subplot(gs[2, 3])\n        values = list(control_response['coil_4'].values())\n        bars = ax14.bar(responses, values, color='plum', alpha=0.7)\n        ax14.set_title('Coil 4 Response Correlations')\n        ax14.set_ylabel('Correlation')\n        ax14.tick_params(axis='x', rotation=45)\n        ax14.grid(True, alpha=0.3, axis='y')\n        max_idx = np.argmax(np.abs(values))\n        bars[max_idx].set_color('purple')\n        \n        # Stability analysis\n        ax15 = fig.add_subplot(gs[2, 4])\n        stability = self.analysis_results['stability']\n        var_names = list(stability.keys())\n        cv_values = [stability[var]['cv'] for var in var_names]\n        bars = ax15.bar(var_names, cv_values, color='gold', alpha=0.7)\n        ax15.set_title('Stability (Coeff. of Variation)')\n        ax15.set_ylabel('CV')\n        ax15.tick_params(axis='x', rotation=45)\n        ax15.grid(True, alpha=0.3, axis='y')\n        \n        # Frequency analysis (fourth row)\n        # FFT of key variables\n        ax16 = fig.add_subplot(gs[3, :])\n        \n        # Calculate and plot power spectra\n        dt = time[1] - time[0]\n        freqs = np.fft.fftfreq(len(time), d=dt)[:len(time)//2]\n        \n        key_vars = ['Ip', 'Te_avg', 'elongation']\n        colors = ['green', 'red', 'purple']\n        \n        for i, var in enumerate(key_vars):\n            data = self.analysis_results['time_evolution'][var]\n            fft = np.fft.fft(data - np.mean(data))\n            power = np.abs(fft[:len(freqs)])**2\n            ax16.semilogy(freqs[1:], power[1:], colors[i], linewidth=2, label=f'{var} PSD')\n        \n        ax16.set_xlabel('Frequency (Hz)')\n        ax16.set_ylabel('Power Spectral Density')\n        ax16.set_title('Frequency Analysis of Key Variables')\n        ax16.legend()\n        ax16.grid(True, alpha=0.3)\n        \n        # Add overall title\n        fig.suptitle('Comprehensive Plasma Physics Analysis', fontsize=16, fontweight='bold')\n        \n        # Save plot\n        plot_path = self.analysis_dir / 'comprehensive_plasma_analysis.png'\n        plt.savefig(plot_path, dpi=150, bbox_inches='tight')\n        plt.show()\n        \n        print(f\"  Comprehensive analysis plot saved to: {plot_path}\")\n    \n    def step3_create_linear_surrogate(self):\n        \"\"\"Step 3: Create linear surrogate model for fast control.\"\"\"\n        \n        print(\"STEP 3: CREATING LINEAR SURROGATE MODEL\")\n        print(\"=\"*50)\n        \n        if self.ds is None:\n            print(\"Error: No physics data loaded\")\n            return False\n        \n        # Prepare training data\n        control_inputs, response_outputs = self._prepare_surrogate_data()\n        \n        # Build linear models\n        models = self._build_linear_models(control_inputs, response_outputs)\n        \n        # Validate models\n        validation_results = self._validate_models(models, control_inputs, response_outputs)\n        \n        # Create fast interface\n        self._create_surrogate_interface(models)\n        \n        # Generate response matrices\n        self._generate_response_matrices(models)\n        \n        print(\"✓ Step 3 complete: Linear surrogate model ready\")\n        return True\n    \n    def _prepare_surrogate_data(self):\n        \"\"\"Prepare data for surrogate model training.\"\"\"\n        \n        print(\"Preparing surrogate training data...\")\n        \n        # Control inputs: coil currents\n        control_inputs = np.column_stack([\n            self.ds.coil_current_1.values,\n            self.ds.coil_current_2.values,\n            self.ds.coil_current_3.values,\n            self.ds.coil_current_4.values\n        ])\n        \n        # Response outputs: key observables\n        response_outputs = {\n            'R_centroid': self.ds.R_centroid.values,\n            'Z_centroid': self.ds.Z_centroid.values,\n            'elongation': self.ds.elongation.values,\n            'triangularity': self.ds.triangularity.values,\n            'Te_avg': self.ds.temp_el.mean(dim='rho_cell_norm').values,\n            'ne_avg': self.ds.ne.mean(dim='rho_cell_norm').values,\n            'Ip': self.ds.Ip.values,\n            'q95': self.ds.q.isel(rho_cell_norm=-1).values,  # q at edge\n        }\n        \n        print(f\"  Control inputs: {control_inputs.shape[1]} variables, {control_inputs.shape[0]} samples\")\n        print(f\"  Response outputs: {len(response_outputs)} variables\")\n        \n        return control_inputs, response_outputs\n    \n    def _build_linear_models(self, control_inputs, response_outputs):\n        \"\"\"Build linear regression models for each response.\"\"\"\n        \n        print(\"Building linear regression models...\")\n        \n        models = {}\n        \n        # Scale inputs for better numerical stability\n        scaler = StandardScaler()\n        control_scaled = scaler.fit_transform(control_inputs)\n        \n        for response_name, response_data in response_outputs.items():\n            # Use Ridge regression for better generalization\n            model = Ridge(alpha=1.0)\n            model.fit(control_scaled, response_data)\n            \n            # Calculate R² score\n            r2 = model.score(control_scaled, response_data)\n            \n            # Store model with metadata\n            models[response_name] = {\n                'model': model,\n                'scaler': scaler,\n                'r2_score': r2,\n                'feature_names': ['coil_1', 'coil_2', 'coil_3', 'coil_4'],\n                'coefficients': model.coef_,\n                'intercept': model.intercept_\n            }\n            \n            print(f\"  {response_name}: R² = {r2:.3f}\")\n        \n        return models\n    \n    def _validate_models(self, models, control_inputs, response_outputs):\n        \"\"\"Validate surrogate models.\"\"\"\n        \n        print(\"Validating surrogate models...\")\n        \n        validation_results = {}\n        \n        for response_name, model_data in models.items():\n            model = model_data['model']\n            scaler = model_data['scaler']\n            \n            # Make predictions\n            control_scaled = scaler.transform(control_inputs)\n            predictions = model.predict(control_scaled)\n            actual = response_outputs[response_name]\n            \n            # Calculate validation metrics\n            r2 = r2_score(actual, predictions)\n            rmse = np.sqrt(mean_squared_error(actual, predictions))\n            mae = np.mean(np.abs(actual - predictions))\n            \n            validation_results[response_name] = {\n                'r2': r2,\n                'rmse': rmse,\n                'mae': mae,\n                'predictions': predictions,\n                'actual': actual\n            }\n            \n            print(f\"  {response_name}: R² = {r2:.3f}, RMSE = {rmse:.4f}, MAE = {mae:.4f}\")\n        \n        return validation_results\n    \n    def _create_surrogate_interface(self, models):\n        \"\"\"Create fast surrogate model interface.\"\"\"\n        \n        print(\"Creating surrogate model interface...\")\n        \n        # Save complete model\n        model_file = self.surrogate_dir / 'linear_surrogate_model.pkl'\n        with open(model_file, 'wb') as f:\n            pickle.dump(models, f)\n        \n        # Create Python interface\n        interface_code = '''import pickle\nimport numpy as np\nfrom pathlib import Path\n\nclass LinearPlasmaSurrogate:\n    \"\"\"Fast linear surrogate model for plasma control.\"\"\"\n    \n    def __init__(self, model_path=\"linear_surrogate_model.pkl\"):\n        \"\"\"Initialize surrogate model.\"\"\"\n        with open(model_path, 'rb') as f:\n            self.models = pickle.load(f)\n        \n        self.control_names = ['coil_1', 'coil_2', 'coil_3', 'coil_4']\n        self.response_names = list(self.models.keys())\n        \n        # Get baseline control values for perturbation analysis\n        self.baseline_controls = np.array([10.0, 8.0, 12.0, 6.0])  # kA\n    \n    def predict(self, coil_currents):\n        \"\"\"Predict plasma responses for given coil currents.\n        \n        Args:\n            coil_currents: Array of shape (4,) or (N, 4) with coil currents in kA\n            \n        Returns:\n            Dictionary of predicted responses\n        \"\"\"\n        coil_currents = np.array(coil_currents)\n        if coil_currents.ndim == 1:\n            coil_currents = coil_currents.reshape(1, -1)\n        \n        responses = {}\n        for response_name, model_data in self.models.items():\n            scaler = model_data['scaler']\n            model = model_data['model']\n            \n            # Scale inputs and predict\n            controls_scaled = scaler.transform(coil_currents)\n            prediction = model.predict(controls_scaled)\n            \n            responses[response_name] = prediction[0] if len(prediction) == 1 else prediction\n        \n        return responses\n    \n    def get_response_matrix(self, perturbation=0.1):\n        \"\"\"Get linear response matrix for small perturbations.\n        \n        Args:\n            perturbation: Size of coil current perturbation in kA\n            \n        Returns:\n            Response matrix (responses x controls)\n        \"\"\"\n        # Calculate baseline response\n        baseline_response = self.predict(self.baseline_controls)\n        \n        # Calculate response to perturbations\n        response_matrix = np.zeros((len(self.response_names), len(self.control_names)))\n        \n        for i, control_name in enumerate(self.control_names):\n            # Perturb one coil\n            perturbed_controls = self.baseline_controls.copy()\n            perturbed_controls[i] += perturbation\n            \n            # Get response\n            perturbed_response = self.predict(perturbed_controls)\n            \n            # Calculate sensitivity (response per unit control change)\n            for j, response_name in enumerate(self.response_names):\n                delta_response = perturbed_response[response_name] - baseline_response[response_name]\n                sensitivity = delta_response / perturbation\n                response_matrix[j, i] = sensitivity\n        \n        return response_matrix\n    \n    def get_control_authority(self):\n        \"\"\"Get control authority analysis.\"\"\"\n        response_matrix = self.get_response_matrix()\n        \n        # Calculate control authority for each coil\n        control_authority = np.linalg.norm(response_matrix, axis=0)\n        \n        # Calculate response controllability for each output\n        response_controllability = np.linalg.norm(response_matrix, axis=1)\n        \n        return {\n            'control_authority': dict(zip(self.control_names, control_authority)),\n            'response_controllability': dict(zip(self.response_names, response_controllability)),\n            'response_matrix': response_matrix\n        }\n\n# Example usage:\n# surrogate = LinearPlasmaSurrogate()\n# responses = surrogate.predict([10.5, 8.2, 12.1, 6.3])\n# response_matrix = surrogate.get_response_matrix()\n# authority = surrogate.get_control_authority()\n'''\n        \n        interface_file = self.surrogate_dir / 'linear_plasma_surrogate.py'\n        with open(interface_file, 'w') as f:\n            f.write(interface_code)\n        \n        print(f\"  Model saved to: {model_file}\")\n        print(f\"  Interface saved to: {interface_file}\")\n    \n    def _generate_response_matrices(self, models):\n        \"\"\"Generate and analyze response matrices.\"\"\"\n        \n        print(\"Generating response matrices...\")\n        \n        # Create surrogate instance for analysis\n        surrogate_file = self.surrogate_dir / 'linear_surrogate_model.pkl'\n        \n        # Load and analyze\n        with open(surrogate_file, 'rb') as f:\n            loaded_models = pickle.load(f)\n        \n        # Calculate response matrix\n        baseline_controls = np.array([10.0, 8.0, 12.0, 6.0])  # kA\n        perturbation = 0.1  # kA\n        \n        response_names = list(loaded_models.keys())\n        control_names = ['coil_1', 'coil_2', 'coil_3', 'coil_4']\n        \n        response_matrix = np.zeros((len(response_names), len(control_names)))\n        \n        # Calculate baseline\n        baseline_scaled = loaded_models[response_names[0]]['scaler'].transform([baseline_controls])\n        baseline_responses = {}\n        for response_name in response_names:\n            model = loaded_models[response_name]['model']\n            baseline_responses[response_name] = model.predict(baseline_scaled)[0]\n        \n        # Calculate sensitivities\n        for i, control_name in enumerate(control_names):\n            perturbed_controls = baseline_controls.copy()\n            perturbed_controls[i] += perturbation\n            perturbed_scaled = loaded_models[response_names[0]]['scaler'].transform([perturbed_controls])\n            \n            for j, response_name in enumerate(response_names):\n                model = loaded_models[response_name]['model']\n                perturbed_response = model.predict(perturbed_scaled)[0]\n                sensitivity = (perturbed_response - baseline_responses[response_name]) / perturbation\n                response_matrix[j, i] = sensitivity\n        \n        # Save response matrix analysis\n        matrix_analysis = {\n            'response_matrix': response_matrix,\n            'response_names': response_names,\n            'control_names': control_names,\n            'baseline_controls': baseline_controls,\n            'perturbation_size': perturbation,\n            'units': {\n                'controls': 'kA',\n                'R_centroid': 'm/kA',\n                'Z_centroid': 'm/kA',\n                'elongation': '1/kA',\n                'triangularity': '1/kA',\n                'Te_avg': 'keV/kA',\n                'ne_avg': '10^19 m^-3/kA',\n                'Ip': 'MA/kA',\n                'q95': '1/kA'\n            }\n        }\n        \n        # Save to JSON for easy access\n        import json\n        matrix_file = self.surrogate_dir / 'response_matrices.json'\n        \n        # Convert numpy arrays to lists for JSON serialization\n        json_data = matrix_analysis.copy()\n        json_data['response_matrix'] = response_matrix.tolist()\n        json_data['baseline_controls'] = baseline_controls.tolist()\n        \n        with open(matrix_file, 'w') as f:\n            json.dump(json_data, f, indent=2)\n        \n        # Create visualization of response matrix\n        plt.figure(figsize=(10, 8))\n        im = plt.imshow(response_matrix, cmap='RdBu_r', aspect='auto')\n        plt.colorbar(im, label='Response Sensitivity')\n        plt.xlabel('Control Inputs (Coils)')\n        plt.ylabel('Response Outputs')\n        plt.title('Linear Response Matrix\\n(Response per unit control change)')\n        plt.xticks(range(len(control_names)), control_names)\n        plt.yticks(range(len(response_names)), response_names)\n        \n        # Add values as text\n        for i in range(len(response_names)):\n            for j in range(len(control_names)):\n                plt.text(j, i, f'{response_matrix[i, j]:.3f}', \n                        ha='center', va='center', fontsize=8)\n        \n        plt.tight_layout()\n        matrix_plot_file = self.surrogate_dir / 'response_matrix_visualization.png'\n        plt.savefig(matrix_plot_file, dpi=150, bbox_inches='tight')\n        plt.show()\n        \n        print(f\"  Response matrix saved to: {matrix_file}\")\n        print(f\"  Matrix visualization saved to: {matrix_plot_file}\")\n        \n        # Print summary\n        print(\"\\n  Response Matrix Summary:\")\n        for i, response in enumerate(response_names):\n            max_sensitivity_idx = np.argmax(np.abs(response_matrix[i, :]))\n            max_sensitivity = response_matrix[i, max_sensitivity_idx]\n            controlling_coil = control_names[max_sensitivity_idx]\n            print(f\"    {response}: Most sensitive to {controlling_coil} ({max_sensitivity:.3f})\")\n    \n    def generate_final_report(self):\n        \"\"\"Generate comprehensive final report.\"\"\"\n        \n        print(\"GENERATING FINAL ANALYSIS REPORT\")\n        print(\"=\"*50)\n        \n        report_path = self.analysis_dir / 'complete_physics_analysis_report.md'\n        \n        with open(report_path, 'w', encoding='utf-8') as f:\n            f.write(\"# Complete Plasma Physics Analysis Report\\n\\n\")\n            f.write(f\"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n\\n\")\n            \n            # Step 2 Results\n            f.write(\"## Step 2: Plasma Dynamics Analysis\\n\\n\")\n            f.write(f\"**Data Source**: {self.physics_file}\\n\")\n            f.write(f\"**Time Range**: {float(self.ds.time[0]):.2f} - {float(self.ds.time[-1]):.2f} s\\n\")\n            f.write(f\"**Time Points**: {len(self.ds.time)}\\n\")\n            f.write(f\"**Radial Points**: {len(self.ds.rho_cell_norm)}\\n\\n\")\n            \n            # Key findings\n            f.write(\"### Key Findings:\\n\\n\")\n            \n            # Time evolution trends\n            trends = self.analysis_results['trends']\n            f.write(\"**Time Evolution Trends:**\\n\")\n            for var, trend in trends.items():\n                f.write(f\"- {var}: slope = {trend['slope']:.3e}, R² = {trend['r_squared']:.3f}\\n\")\n            f.write(\"\\n\")\n            \n            # Stability analysis\n            stability = self.analysis_results['stability']\n            f.write(\"**Stability Analysis:**\\n\")\n            for var, metrics in stability.items():\n                f.write(f\"- {var}: CV = {metrics['cv']:.3f}, Dominant freq = {metrics['dominant_freq']:.3f} Hz\\n\")\n            f.write(\"\\n\")\n            \n            # Control correlations\n            control_response = self.analysis_results['correlations']['control_response']\n            f.write(\"**Strongest Control-Response Correlations:**\\n\")\n            for coil, responses in control_response.items():\n                max_response = max(responses.items(), key=lambda x: abs(x[1]))\n                f.write(f\"- {coil}: {max_response[0]} (correlation = {max_response[1]:.3f})\\n\")\n            f.write(\"\\n\")\n            \n            # Step 3 Results\n            f.write(\"## Step 3: Linear Surrogate Model\\n\\n\")\n            f.write(\"**Model Type**: Ridge Linear Regression\\n\")\n            f.write(\"**Control Inputs**: 4 coil currents (kA)\\n\")\n            f.write(\"**Response Outputs**: 8 plasma observables\\n\\n\")\n            \n            f.write(\"### Model Performance:\\n\\n\")\n            f.write(\"| Response Variable | R² Score | Units |\\n\")\n            f.write(\"|-------------------|----------|-------|\\n\")\n            \n            # This would be filled in if we had the validation results\n            response_vars = ['R_centroid', 'Z_centroid', 'elongation', 'triangularity', \n                           'Te_avg', 'ne_avg', 'Ip', 'q95']\n            units = ['m', 'm', 'dimensionless', 'dimensionless', 'keV', '10^19 m^-3', 'MA', 'dimensionless']\n            \n            for var, unit in zip(response_vars, units):\n                f.write(f\"| {var} | TBD | {unit} |\\n\")\n            \n            f.write(\"\\n\")\n            \n            f.write(\"### Deliverables:\\n\\n\")\n            f.write(f\"- **Analysis plots**: `{self.analysis_dir}/comprehensive_plasma_analysis.png`\\n\")\n            f.write(f\"- **Surrogate model**: `{self.surrogate_dir}/linear_surrogate_model.pkl`\\n\")\n            f.write(f\"- **Model interface**: `{self.surrogate_dir}/linear_plasma_surrogate.py`\\n\")\n            f.write(f\"- **Response matrices**: `{self.surrogate_dir}/response_matrices.json`\\n\")\n            f.write(f\"- **Matrix visualization**: `{self.surrogate_dir}/response_matrix_visualization.png`\\n\\n\")\n            \n            f.write(\"### RL Integration:\\n\\n\")\n            f.write(\"```python\\n\")\n            f.write(\"from linear_plasma_surrogate import LinearPlasmaSurrogate\\n\\n\")\n            f.write(\"# Initialize surrogate\\n\")\n            f.write(\"surrogate = LinearPlasmaSurrogate()\\n\\n\")\n            f.write(\"# Predict responses\\n\")\n            f.write(\"coil_currents = [10.5, 8.2, 12.1, 6.3]  # kA\\n\")\n            f.write(\"responses = surrogate.predict(coil_currents)\\n\\n\")\n            f.write(\"# Get response matrix for control design\\n\")\n            f.write(\"response_matrix = surrogate.get_response_matrix()\\n\")\n            f.write(\"control_authority = surrogate.get_control_authority()\\n\")\n            f.write(\"```\\n\\n\")\n            \n            f.write(\"**Status**: Ready for reinforcement learning integration\\n\")\n        \n        print(f\"Final report saved to: {report_path}\")\n        return report_path\n\ndef main():\n    \"\"\"Main analysis workflow.\"\"\"\n    \n    print(\"COMPLETE PLASMA PHYSICS ANALYSIS WORKFLOW\")\n    print(\"=\"*60)\n    \n    # Initialize analyzer\n    analyzer = CompletePlasmaAnalyzer()\n    \n    # Load physics data\n    if not analyzer.load_physics_data():\n        print(\"Failed to load physics data\")\n        return\n    \n    # Step 2: Analyze plasma dynamics\n    if not analyzer.step2_analyze_plasma_dynamics():\n        print(\"Failed to complete Step 2\")\n        return\n    \n    # Step 3: Create linear surrogate\n    if not analyzer.step3_create_linear_surrogate():\n        print(\"Failed to complete Step 3\")\n        return\n    \n    # Generate final report\n    report_path = analyzer.generate_final_report()\n    \n    print(\"\\n\" + \"=\"*60)\n    print(\"ANALYSIS COMPLETE!\")\n    print(\"=\"*60)\n    print(\"\\nDeliverables:\")\n    print(f\"- Comprehensive analysis: physics_analysis/\")\n    print(f\"- Linear surrogate model: linear_surrogate/\")\n    print(f\"- Final report: {report_path}\")\n    print(\"\\nSurrogate model ready for RL integration!\")\n\nif __name__ == \"__main__\":\n    main()
+        print("STEP 2: ANALYZING PLASMA DYNAMICS")
+        print("="*50)
         
-        # Select representative time slices
+        if self.ds is None:
+            print("Error: No physics data loaded")
+            return False
+        
+        # Extract key data
+        time = self.ds.time.values
+        rho = self.ds.rho_cell_norm.values
+        
+        # Time evolution analysis
+        self._analyze_time_evolution(time)
+        
+        # Profile analysis
+        self._analyze_radial_profiles(time, rho)
+        
+        # Correlation analysis
+        self._analyze_correlations()
+        
+        # Create plots
+        self._create_analysis_plots()
+        
+        print("✓ Step 2 complete: Plasma dynamics analyzed")
+        return True
+    
+    def _analyze_time_evolution(self, time):
+        """Analyze time evolution of key parameters."""
+        
+        print("Analyzing time evolution...")
+        
+        # Extract time series
+        Te_avg = self.ds.temp_el.mean(dim='rho_cell_norm')
+        Ti_avg = self.ds.temp_ion.mean(dim='rho_cell_norm')
+        ne_avg = self.ds.ne.mean(dim='rho_cell_norm')
+        
+        # Coil currents
+        coil_currents = np.column_stack([
+            self.ds[f'coil_current_{i}'].values for i in range(1, 5)
+        ])
+        
+        # Store results
+        self.analysis_results['time_evolution'] = {
+            'time': time,
+            'Te_avg': Te_avg.values,
+            'Ti_avg': Ti_avg.values,
+            'ne_avg': ne_avg.values,
+            'Ip': self.ds.Ip.values,
+            'elongation': self.ds.elongation.values,
+            'triangularity': self.ds.triangularity.values,
+            'R_centroid': self.ds.R_centroid.values,
+            'Z_centroid': self.ds.Z_centroid.values,
+            'coil_currents': coil_currents,
+        }
+        
+        print(f"  Analyzed time evolution for {len(time)} time points")
+    
+    def _analyze_radial_profiles(self, time, rho):
+        """Analyze radial profiles."""
+        
+        print("Analyzing radial profiles...")
+        
+        # Select 5 representative time slices
         n_slices = 5
         time_indices = np.linspace(0, len(time)-1, n_slices, dtype=int)
         
@@ -312,7 +133,6 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
                 'Ti': self.ds.temp_ion[t_idx, :].values,
                 'ne': self.ds.ne[t_idx, :].values,
                 'q': self.ds.q[t_idx, :].values,
-                'jtot': self.ds.jtot[t_idx, :].values,
             }
         
         self.analysis_results['radial_profiles'] = {
@@ -327,7 +147,7 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         
         print("Analyzing control-response correlations...")
         
-        # Prepare data for correlation analysis
+        # Control data
         control_data = {
             'coil_1': self.ds.coil_current_1.values,
             'coil_2': self.ds.coil_current_2.values,
@@ -335,6 +155,7 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
             'coil_4': self.ds.coil_current_4.values,
         }
         
+        # Response data
         response_data = {
             'R_centroid': self.ds.R_centroid.values,
             'Z_centroid': self.ds.Z_centroid.values,
@@ -364,125 +185,118 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         
         print(f"  Calculated correlations for {len(control_data)} controls and {len(response_data)} responses")
     
-    def _analyze_stability_patterns(self, time):
-        """Analyze stability and dynamic patterns."""
-        
-        print("Analyzing stability patterns...")
-        
-        stability_metrics = {}
-        
-        # Analyze key variables for stability
-        variables = {
-            'Ip': self.ds.Ip.values,
-            'Te_avg': self.ds.temp_el.mean(dim='rho_cell_norm').values,
-            'elongation': self.ds.elongation.values,
-            'beta_n': self.ds.P_heat.values / (self.ds.Ip.values * 5.3)  # Approximate beta_N
-        }
-        
-        for var_name, data in variables.items():
-            # Calculate stability metrics
-            std_dev = np.std(data)
-            mean_val = np.mean(data)
-            cv = std_dev / mean_val if mean_val != 0 else 0  # Coefficient of variation
-            
-            # Detect oscillations using FFT
-            fft = np.fft.fft(data - np.mean(data))
-            freqs = np.fft.fftfreq(len(data), d=time[1] - time[0])
-            power_spectrum = np.abs(fft)**2
-            
-            # Find dominant frequency
-            dominant_freq_idx = np.argmax(power_spectrum[1:len(power_spectrum)//2]) + 1
-            dominant_freq = freqs[dominant_freq_idx]
-            
-            stability_metrics[var_name] = {
-                'std_dev': std_dev,
-                'cv': cv,
-                'dominant_freq': dominant_freq,
-                'oscillation_amplitude': np.sqrt(power_spectrum[dominant_freq_idx])
-            }
-        
-        self.analysis_results['stability'] = stability_metrics
-        print(f"  Analyzed stability for {len(stability_metrics)} variables")
-    
-    def _create_comprehensive_plots(self):
+    def _create_analysis_plots(self):
         """Create comprehensive analysis visualizations."""
         
-        print("Creating comprehensive analysis plots...")
+        print("Creating analysis plots...")
         
-        # Create multi-panel figure
-        fig = plt.figure(figsize=(20, 15))
-        gs = gridspec.GridSpec(4, 5, figure=fig, hspace=0.3, wspace=0.3)
+        # Create figure with subplots
+        fig, axes = plt.subplots(3, 4, figsize=(16, 12))
         
-        # Time evolution plots (top row)
         time = self.analysis_results['time_evolution']['time']
         
+        # Row 1: Time evolution plots
         # Temperature evolution
-        ax1 = fig.add_subplot(gs[0, 0])
-        ax1.plot(time, self.analysis_results['time_evolution']['Te_avg'], 'r-', label='Te avg', linewidth=2)
-        ax1.plot(time, self.analysis_results['time_evolution']['Ti_avg'], 'b-', label='Ti avg', linewidth=2)
-        ax1.set_xlabel('Time (s)')
-        ax1.set_ylabel('Temperature (keV)')
-        ax1.set_title('Temperature Evolution')
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
+        axes[0,0].plot(time, self.analysis_results['time_evolution']['Te_avg'], 'r-', label='Te avg', linewidth=2)
+        axes[0,0].plot(time, self.analysis_results['time_evolution']['Ti_avg'], 'b-', label='Ti avg', linewidth=2)
+        axes[0,0].set_xlabel('Time (s)')
+        axes[0,0].set_ylabel('Temperature (keV)')
+        axes[0,0].set_title('Temperature Evolution')
+        axes[0,0].legend()
+        axes[0,0].grid(True, alpha=0.3)
         
-        # Plasma current and density
-        ax2 = fig.add_subplot(gs[0, 1])
-        ax2_twin = ax2.twinx()
-        line1 = ax2.plot(time, self.analysis_results['time_evolution']['Ip'], 'g-', linewidth=2, label='Ip')
-        line2 = ax2_twin.plot(time, self.analysis_results['time_evolution']['ne_avg'], 'orange', linewidth=2, label='ne avg')
-        ax2.set_xlabel('Time (s)')
-        ax2.set_ylabel('Plasma Current (MA)', color='g')
-        ax2_twin.set_ylabel('Density (10^19 m^-3)', color='orange')
-        ax2.set_title('Current & Density')
-        ax2.grid(True, alpha=0.3)
+        # Plasma current
+        axes[0,1].plot(time, self.analysis_results['time_evolution']['Ip'], 'g-', linewidth=2)
+        axes[0,1].set_xlabel('Time (s)')
+        axes[0,1].set_ylabel('Plasma Current (MA)')
+        axes[0,1].set_title('Plasma Current Evolution')
+        axes[0,1].grid(True, alpha=0.3)
         
         # Shape metrics
-        ax3 = fig.add_subplot(gs[0, 2])
-        ax3.plot(time, self.analysis_results['time_evolution']['elongation'], 'purple', linewidth=2, label='κ')
-        ax3_twin = ax3.twinx()
-        ax3_twin.plot(time, self.analysis_results['time_evolution']['triangularity'], 'brown', linewidth=2, label='δ')
-        ax3.set_xlabel('Time (s)')
-        ax3.set_ylabel('Elongation κ', color='purple')
-        ax3_twin.set_ylabel('Triangularity δ', color='brown')
-        ax3.set_title('Shape Metrics')
-        ax3.grid(True, alpha=0.3)
+        axes[0,2].plot(time, self.analysis_results['time_evolution']['elongation'], 'purple', linewidth=2, label='κ')
+        axes[0,2].plot(time, self.analysis_results['time_evolution']['triangularity'], 'brown', linewidth=2, label='δ')
+        axes[0,2].set_xlabel('Time (s)')
+        axes[0,2].set_ylabel('Shape Metrics')
+        axes[0,2].set_title('Shape Evolution')
+        axes[0,2].legend()
+        axes[0,2].grid(True, alpha=0.3)
         
         # Centroid positions
-        ax4 = fig.add_subplot(gs[0, 3])
-        ax4.plot(time, self.analysis_results['time_evolution']['R_centroid'], 'red', linewidth=2, label='R')
-        ax4_twin = ax4.twinx()
-        ax4_twin.plot(time, self.analysis_results['time_evolution']['Z_centroid'], 'blue', linewidth=2, label='Z')
-        ax4.set_xlabel('Time (s)')
-        ax4.set_ylabel('R centroid (m)', color='red')
-        ax4_twin.set_ylabel('Z centroid (m)', color='blue')
-        ax4.set_title('Centroid Position')
-        ax4.grid(True, alpha=0.3)
+        axes[0,3].plot(time, self.analysis_results['time_evolution']['R_centroid'], 'red', linewidth=2, label='R')
+        axes[0,3].plot(time, self.analysis_results['time_evolution']['Z_centroid'], 'blue', linewidth=2, label='Z')
+        axes[0,3].set_xlabel('Time (s)')
+        axes[0,3].set_ylabel('Centroid (m)')
+        axes[0,3].set_title('Centroid Position')
+        axes[0,3].legend()
+        axes[0,3].grid(True, alpha=0.3)
         
-        # Coil currents
-        ax5 = fig.add_subplot(gs[0, 4])
-        coil_currents = self.analysis_results['time_evolution']['coil_currents']
-        colors = ['red', 'blue', 'green', 'orange']
-        for i in range(4):
-            ax5.plot(time, coil_currents[:, i], colors[i], linewidth=2, label=f'Coil {i+1}')
-        ax5.set_xlabel('Time (s)')
-        ax5.set_ylabel('Current (kA)')
-        ax5.set_title('Coil Currents')
-        ax5.legend()
-        ax5.grid(True, alpha=0.3)
+        # Row 2: Radial profiles
+        rho = self.analysis_results['radial_profiles']['rho']
+        profiles = self.analysis_results['radial_profiles']['profiles']
         
-        # Add overall title
-        fig.suptitle('Comprehensive Plasma Physics Analysis', fontsize=16, fontweight='bold')
+        # Temperature profiles
+        for i, (time_key, profile) in enumerate(profiles.items()):
+            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)
+            axes[1,0].plot(rho, profile['Te'], 'r-', alpha=alpha, linewidth=2, label=f'Te {time_key}')
+            axes[1,0].plot(rho, profile['Ti'], 'b--', alpha=alpha, linewidth=2, label=f'Ti {time_key}')
+        axes[1,0].set_xlabel('ρ')
+        axes[1,0].set_ylabel('Temperature (keV)')
+        axes[1,0].set_title('Temperature Profiles')
+        axes[1,0].grid(True, alpha=0.3)
+        
+        # Density profiles
+        for i, (time_key, profile) in enumerate(profiles.items()):
+            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)
+            axes[1,1].plot(rho, profile['ne'], 'orange', alpha=alpha, linewidth=2, label=f'ne {time_key}')
+        axes[1,1].set_xlabel('ρ')
+        axes[1,1].set_ylabel('Density (10^19 m^-3)')
+        axes[1,1].set_title('Density Profiles')
+        axes[1,1].grid(True, alpha=0.3)
+        
+        # Safety factor profiles
+        for i, (time_key, profile) in enumerate(profiles.items()):
+            alpha = 0.3 + 0.7 * i / (len(profiles) - 1)
+            axes[1,2].plot(rho, profile['q'], 'purple', alpha=alpha, linewidth=2, label=f'q {time_key}')
+        axes[1,2].set_xlabel('ρ')
+        axes[1,2].set_ylabel('Safety Factor q')
+        axes[1,2].set_title('q Profiles')
+        axes[1,2].grid(True, alpha=0.3)
+        
+        # Correlation matrix
+        corr_matrix = self.analysis_results['correlations']['full_matrix']
+        im = axes[1,3].imshow(corr_matrix.values, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
+        axes[1,3].set_xticks(range(len(corr_matrix.columns)))
+        axes[1,3].set_yticks(range(len(corr_matrix.index)))
+        axes[1,3].set_xticklabels(corr_matrix.columns, rotation=45, ha='right')
+        axes[1,3].set_yticklabels(corr_matrix.index)
+        axes[1,3].set_title('Correlation Matrix')
+        
+        # Row 3: Control-response analysis
+        control_response = self.analysis_results['correlations']['control_response']
+        
+        for i, (coil_name, responses) in enumerate(control_response.items()):
+            if i < 4:  # Only plot first 4 coils
+                response_names = list(responses.keys())
+                values = list(responses.values())
+                
+                axes[2,i].bar(response_names, values, alpha=0.7)
+                axes[2,i].set_title(f'{coil_name.replace("_", " ").title()} Correlations')
+                axes[2,i].set_ylabel('Correlation')
+                axes[2,i].tick_params(axis='x', rotation=45)
+                axes[2,i].grid(True, alpha=0.3, axis='y')
+        
+        plt.suptitle('Comprehensive Plasma Physics Analysis', fontsize=16, fontweight='bold')
+        plt.tight_layout()
         
         # Save plot
         plot_path = self.analysis_dir / 'comprehensive_plasma_analysis.png'
         plt.savefig(plot_path, dpi=150, bbox_inches='tight')
-        plt.close()
+        plt.show()
         
-        print(f"  Comprehensive analysis plot saved to: {plot_path}")
+        print(f"  Analysis plot saved to: {plot_path}")
     
     def step3_create_linear_surrogate(self):
-        """Step 3: Create linear surrogate model for fast control."""
+        """Step 3: Create linear surrogate model."""
         
         print("STEP 3: CREATING LINEAR SURROGATE MODEL")
         print("="*50)
@@ -494,13 +308,10 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         # Prepare training data
         control_inputs, response_outputs = self._prepare_surrogate_data()
         
-        # Build linear models
+        # Build models
         models = self._build_linear_models(control_inputs, response_outputs)
         
-        # Validate models
-        validation_results = self._validate_models(models, control_inputs, response_outputs)
-        
-        # Create fast interface
+        # Create interface
         self._create_surrogate_interface(models)
         
         # Generate response matrices
@@ -540,25 +351,25 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         return control_inputs, response_outputs
     
     def _build_linear_models(self, control_inputs, response_outputs):
-        """Build linear regression models for each response."""
+        """Build linear regression models."""
         
         print("Building linear regression models...")
         
         models = {}
         
-        # Scale inputs for better numerical stability
+        # Scale inputs
         scaler = StandardScaler()
         control_scaled = scaler.fit_transform(control_inputs)
         
         for response_name, response_data in response_outputs.items():
-            # Use Ridge regression for better generalization
+            # Use Ridge regression
             model = Ridge(alpha=1.0)
             model.fit(control_scaled, response_data)
             
             # Calculate R² score
             r2 = model.score(control_scaled, response_data)
             
-            # Store model with metadata
+            # Store model
             models[response_name] = {
                 'model': model,
                 'scaler': scaler,
@@ -572,53 +383,89 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         
         return models
     
-    def _validate_models(self, models, control_inputs, response_outputs):
-        """Validate surrogate models."""
-        
-        print("Validating surrogate models...")
-        
-        validation_results = {}
-        
-        for response_name, model_data in models.items():
-            model = model_data['model']
-            scaler = model_data['scaler']
-            
-            # Make predictions
-            control_scaled = scaler.transform(control_inputs)
-            predictions = model.predict(control_scaled)
-            actual = response_outputs[response_name]
-            
-            # Calculate validation metrics
-            r2 = r2_score(actual, predictions)
-            rmse = np.sqrt(mean_squared_error(actual, predictions))
-            mae = np.mean(np.abs(actual - predictions))
-            
-            validation_results[response_name] = {
-                'r2': r2,
-                'rmse': rmse,
-                'mae': mae,
-                'predictions': predictions,
-                'actual': actual
-            }
-            
-            print(f"  {response_name}: R² = {r2:.3f}, RMSE = {rmse:.4f}, MAE = {mae:.4f}")
-        
-        return validation_results
-    
     def _create_surrogate_interface(self, models):
-        """Create fast surrogate model interface."""
+        """Create surrogate model interface."""
         
         print("Creating surrogate model interface...")
         
-        # Save complete model
+        # Save model
         model_file = self.surrogate_dir / 'linear_surrogate_model.pkl'
         with open(model_file, 'wb') as f:
             pickle.dump(models, f)
         
+        # Create interface code
+        interface_code = '''import pickle
+import numpy as np
+
+class LinearPlasmaSurrogate:
+    """Fast linear surrogate model for plasma control."""
+    
+    def __init__(self, model_path="linear_surrogate_model.pkl"):
+        """Initialize surrogate model."""
+        with open(model_path, 'rb') as f:
+            self.models = pickle.load(f)
+        
+        self.control_names = ['coil_1', 'coil_2', 'coil_3', 'coil_4']
+        self.response_names = list(self.models.keys())
+        self.baseline_controls = np.array([10.0, 8.0, 12.0, 6.0])  # kA
+    
+    def predict(self, coil_currents):
+        """Predict plasma responses for given coil currents.
+        
+        Args:
+            coil_currents: Array with coil currents in kA
+            
+        Returns:
+            Dictionary of predicted responses
+        """
+        coil_currents = np.array(coil_currents).reshape(1, -1)
+        
+        responses = {}
+        for response_name, model_data in self.models.items():
+            scaler = model_data['scaler']
+            model = model_data['model']
+            
+            controls_scaled = scaler.transform(coil_currents)
+            prediction = model.predict(controls_scaled)
+            
+            responses[response_name] = prediction[0]
+        
+        return responses
+    
+    def get_response_matrix(self, perturbation=0.1):
+        """Get linear response matrix."""
+        baseline_response = self.predict(self.baseline_controls)
+        
+        response_matrix = np.zeros((len(self.response_names), len(self.control_names)))
+        
+        for i, control_name in enumerate(self.control_names):
+            perturbed_controls = self.baseline_controls.copy()
+            perturbed_controls[i] += perturbation
+            
+            perturbed_response = self.predict(perturbed_controls)
+            
+            for j, response_name in enumerate(self.response_names):
+                delta_response = perturbed_response[response_name] - baseline_response[response_name]
+                sensitivity = delta_response / perturbation
+                response_matrix[j, i] = sensitivity
+        
+        return response_matrix
+
+# Example usage:
+# surrogate = LinearPlasmaSurrogate()
+# responses = surrogate.predict([10.5, 8.2, 12.1, 6.3])
+# response_matrix = surrogate.get_response_matrix()
+'''
+        
+        interface_file = self.surrogate_dir / 'linear_plasma_surrogate.py'
+        with open(interface_file, 'w') as f:
+            f.write(interface_code)
+        
         print(f"  Model saved to: {model_file}")
+        print(f"  Interface saved to: {interface_file}")
     
     def _generate_response_matrices(self, models):
-        """Generate and analyze response matrices."""
+        """Generate response matrices."""
         
         print("Generating response matrices...")
         
@@ -631,9 +478,8 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         
         response_matrix = np.zeros((len(response_names), len(control_names)))
         
-        # Calculate baseline
-        scaler = models[response_names[0]]['scaler']
-        baseline_scaled = scaler.transform([baseline_controls])
+        # Calculate baseline responses
+        baseline_scaled = models[response_names[0]]['scaler'].transform([baseline_controls])
         baseline_responses = {}
         for response_name in response_names:
             model = models[response_name]['model']
@@ -643,7 +489,7 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
         for i, control_name in enumerate(control_names):
             perturbed_controls = baseline_controls.copy()
             perturbed_controls[i] += perturbation
-            perturbed_scaled = scaler.transform([perturbed_controls])
+            perturbed_scaled = models[response_names[0]]['scaler'].transform([perturbed_controls])
             
             for j, response_name in enumerate(response_names):
                 model = models[response_name]['model']
@@ -651,28 +497,101 @@ class CompletePlasmaAnalyzer:class CompletePlasmaAnalyzer:
                 sensitivity = (perturbed_response - baseline_responses[response_name]) / perturbation
                 response_matrix[j, i] = sensitivity
         
-        # Save response matrix analysis
-        matrix_analysis = {
+        # Save response matrix
+        matrix_data = {
             'response_matrix': response_matrix.tolist(),
             'response_names': response_names,
             'control_names': control_names,
             'baseline_controls': baseline_controls.tolist(),
-            'perturbation_size': perturbation,
+            'perturbation_size': perturbation
         }
         
         matrix_file = self.surrogate_dir / 'response_matrices.json'
         with open(matrix_file, 'w') as f:
-            json.dump(matrix_analysis, f, indent=2)
+            json.dump(matrix_data, f, indent=2)
+        
+        # Create visualization
+        plt.figure(figsize=(10, 8))
+        im = plt.imshow(response_matrix, cmap='RdBu_r', aspect='auto')
+        plt.colorbar(im, label='Response Sensitivity')
+        plt.xlabel('Control Inputs (Coils)')
+        plt.ylabel('Response Outputs')
+        plt.title('Linear Response Matrix')
+        plt.xticks(range(len(control_names)), control_names)
+        plt.yticks(range(len(response_names)), response_names)
+        
+        # Add values as text
+        for i in range(len(response_names)):
+            for j in range(len(control_names)):
+                plt.text(j, i, f'{response_matrix[i, j]:.3f}', 
+                        ha='center', va='center', fontsize=8)
+        
+        plt.tight_layout()
+        matrix_plot_file = self.surrogate_dir / 'response_matrix_visualization.png'
+        plt.savefig(matrix_plot_file, dpi=150, bbox_inches='tight')
+        plt.show()
         
         print(f"  Response matrix saved to: {matrix_file}")
+        print(f"  Matrix plot saved to: {matrix_plot_file}")
         
         # Print summary
-        print("\n  Response Matrix Summary:")
+        print("  Response Matrix Summary:")
         for i, response in enumerate(response_names):
             max_sensitivity_idx = np.argmax(np.abs(response_matrix[i, :]))
             max_sensitivity = response_matrix[i, max_sensitivity_idx]
             controlling_coil = control_names[max_sensitivity_idx]
             print(f"    {response}: Most sensitive to {controlling_coil} ({max_sensitivity:.3f})")
+    
+    def generate_final_report(self):
+        """Generate final report."""
+        
+        print("GENERATING FINAL ANALYSIS REPORT")
+        print("="*50)
+        
+        report_path = self.analysis_dir / 'complete_physics_analysis_report.md'
+        
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write("# Complete Plasma Physics Analysis Report\\n\\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n\\n")
+            
+            f.write("## Step 2: Plasma Dynamics Analysis\\n\\n")
+            f.write(f"**Data Source**: {self.physics_file}\\n")
+            f.write(f"**Time Range**: {float(self.ds.time[0]):.2f} - {float(self.ds.time[-1]):.2f} s\\n")
+            f.write(f"**Time Points**: {len(self.ds.time)}\\n")
+            f.write(f"**Radial Points**: {len(self.ds.rho_cell_norm)}\\n\\n")
+            
+            f.write("### Key Variables Analyzed:\\n")
+            f.write("- Electron temperature Te(t)\\n")
+            f.write("- Ion temperature Ti(t)\\n") 
+            f.write("- Electron density ne(t)\\n")
+            f.write("- Plasma current Ip(t)\\n")
+            f.write("- Shape metrics (elongation, triangularity)\\n")
+            f.write("- Centroid positions (R, Z)\\n")
+            f.write("- Safety factor q(rho, t)\\n")
+            f.write("- Coil currents (control inputs)\\n\\n")
+            
+            f.write("## Step 3: Linear Surrogate Model\\n\\n")
+            f.write("**Model Type**: Ridge Linear Regression\\n")
+            f.write("**Control Inputs**: 4 coil currents (kA)\\n")
+            f.write("**Response Outputs**: 8 plasma observables\\n\\n")
+            
+            f.write("### Deliverables:\\n")
+            f.write(f"- **Analysis plots**: `{self.analysis_dir}/comprehensive_plasma_analysis.png`\\n")
+            f.write(f"- **Surrogate model**: `{self.surrogate_dir}/linear_surrogate_model.pkl`\\n")
+            f.write(f"- **Model interface**: `{self.surrogate_dir}/linear_plasma_surrogate.py`\\n")
+            f.write(f"- **Response matrices**: `{self.surrogate_dir}/response_matrices.json`\\n")
+            f.write(f"- **Matrix visualization**: `{self.surrogate_dir}/response_matrix_visualization.png`\\n\\n")
+            
+            f.write("### RL Integration Ready:\\n")
+            f.write("```python\\n")
+            f.write("from linear_plasma_surrogate import LinearPlasmaSurrogate\\n\\n")
+            f.write("surrogate = LinearPlasmaSurrogate()\\n")
+            f.write("responses = surrogate.predict([10.5, 8.2, 12.1, 6.3])\\n")
+            f.write("response_matrix = surrogate.get_response_matrix()\\n")
+            f.write("```\\n")
+        
+        print(f"Final report saved to: {report_path}")
+        return report_path
 
 def main():
     """Main analysis workflow."""
@@ -698,13 +617,17 @@ def main():
         print("Failed to complete Step 3")
         return
     
-    print("\n" + "="*60)
+    # Generate final report
+    report_path = analyzer.generate_final_report()
+    
+    print("\\n" + "="*60)
     print("ANALYSIS COMPLETE!")
     print("="*60)
-    print("\nDeliverables:")
+    print("\\nDeliverables:")
     print(f"- Comprehensive analysis: outputs/")
     print(f"- Linear surrogate model: models/")
-    print("\nSurrogate model ready for RL integration!")
+    print(f"- Final report: {report_path}")
+    print("\\nSurrogate model ready for RL integration!")
 
 if __name__ == "__main__":
     main()
