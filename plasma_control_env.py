@@ -39,7 +39,8 @@ class PlasmaControlEnv(gym.Env):
         super(PlasmaControlEnv, self).__init__()
         
         # Load our trained surrogate model
-        self.surrogate = LinearPlasmaSurrogate()
+        model_path = Path(__file__).parent / "linear_surrogate" / "linear_surrogate_model.pkl"
+        self.surrogate = LinearPlasmaSurrogate(str(model_path))
         
         # Episode parameters
         self.max_steps = max_steps

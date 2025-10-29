@@ -73,3 +73,6 @@ models/checkpoints/
 # Logs
 *.log
 logs/
+
+# Archive (old/deprecated files)
+archive/
