@@ -207,8 +207,8 @@ def create_performance_visualization():
     if log_file.exists():
         import pandas as pd
         
-        # Load training data
-        df = pd.read_csv(log_file)
+        # Load training data - skip the JSON header line
+        df = pd.read_csv(log_file, skiprows=1)
         
         if len(df) > 0:
             # Create training progress plot
