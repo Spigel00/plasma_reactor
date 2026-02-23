@@ -1,0 +1,184 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Plasma Deployment Results</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1000px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                padding: 40px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            }
+            header {
+                border-bottom: 3px solid #667eea;
+                padding-bottom: 20px;
+                margin-bottom: 40px;
+            }
+            h1 {
+                color: #667eea;
+                font-size: 2.2em;
+                margin-bottom: 5px;
+            }
+            .timestamp {
+                color: #666;
+                font-size: 0.9em;
+            }
+            h2 {
+                color: #764ba2;
+                margin-top: 30px;
+                margin-bottom: 15px;
+                border-left: 4px solid #667eea;
+                padding-left: 15px;
+            }
+            .metrics-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+                margin: 20px 0;
+            }
+            .metric-card {
+                background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+                border: 2px solid #667eea;
+                border-radius: 10px;
+                padding: 20px;
+                text-align: center;
+            }
+            .metric-card.success {
+                border-color: #27ae60;
+                background: linear-gradient(135deg, #27ae6015 0%, #2ecc7115 100%);
+            }
+            .metric-value {
+                font-size: 2.5em;
+                font-weight: bold;
+                color: #667eea;
+                margin: 10px 0;
+            }
+            .metric-card.success .metric-value {
+                color: #27ae60;
+            }
+            .metric-label {
+                color: #666;
+                font-size: 0.95em;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .status-good {
+                color: #27ae60;
+                font-weight: bold;
+            }
+            .status-bad {
+                color: #e74c3c;
+                font-weight: bold;
+            }
+            .description {
+                background: #f9f9f9;
+                border-left: 4px solid #667eea;
+                padding: 15px;
+                margin: 15px 0;
+                border-radius: 5px;
+                line-height: 1.6;
+            }
+            footer {
+                border-top: 2px solid #eee;
+                margin-top: 40px;
+                padding-top: 20px;
+                color: #999;
+                text-align: center;
+                font-size: 0.9em;
+            }
+            .success-badge {
+                display: inline-block;
+                background: #27ae60;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 20px;
+                margin: 20px 0;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>Plasma Control Deployment Report</h1>
+                <p class="timestamp">Generated: 2026-02-17 14:56:29</p>
+            </header>
+            
+            <div class="success-badge">DEPLOYMENT SUCCESSFUL</div>
+            
+            <h2>Control Performance Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Total Steps Executed</div>
+                    <div class="metric-value">150</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Accumulated Reward</div>
+                    <div class="metric-value">+290.21</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Average Reward/Step</div>
+                    <div class="metric-value">+1.93</div>
+                </div>
+                <div class="metric-card success">
+                    <div class="metric-label">Disruptions Detected</div>
+                    <div class="metric-value" style="color: #27ae60;">0</div>
+                </div>
+            </div>
+            
+            <h2>Plasma Stability Analysis</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Initial q95</div>
+                    <div class="metric-value">2.85</div>
+                    <div style="color: #666; font-size: 0.85em;">Initial safety index</div>
+                </div>
+                <div class="metric-card success">
+                    <div class="metric-label">Final q95</div>
+                    <div class="metric-value">2.34</div>
+                    <div style="color: #27ae60; font-size: 0.85em;">Safe (>2.0 ✓)</div>
+                </div>
+            </div>
+            
+            <h2>Deployment Summary</h2>
+            <div class="description">
+                <p><strong>Status:</strong> <span class="status-good">✓ Operational</span></p>
+                <p><strong>Duration:</strong> 150 control timesteps (~15.0 seconds)</p>
+                <p><strong>Control Quality:</strong> Stable and consistent</p>
+                <p><strong>Safety Margin:</strong> Maintained throughout deployment (q95 > 2.0)</p>
+                <p><strong>Disruption Events:</strong> 0 (Perfect safety record)</p>
+            </div>
+            
+            <h2>Achievements</h2>
+            <ul style="margin-left: 20px; line-height: 1.8;">
+                <li><strong>Stable Control:</strong> Agent maintained consistent control policy for 150 consecutive steps</li>
+                <li><strong>Positive Rewards:</strong> Continuous positive rewards (+1.93/step) indicating good control actions</li>
+                <li><strong>Safety Priority:</strong> Stability index maintained above critical threshold (q95 = 2.34 > 2.0)</li>
+                <li><strong>Zero Failures:</strong> No disruptions or control failures detected</li>
+                <li><strong>Reproducible:</strong> Control policy is deterministic and repeatable</li>
+            </ul>
+            
+            <footer>
+                <p>Plasma Control System - RL-Based Tokamak Controller</p>
+                <p>© 2026 Plasma Research Initiative | Deployment Test Report</p>
+            </footer>
+        </div>
+    </body>
+    </html>
+    

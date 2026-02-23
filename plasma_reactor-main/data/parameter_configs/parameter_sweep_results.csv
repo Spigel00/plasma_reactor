@@ -1,0 +1,11 @@
+Ip_MA,Ic_MA,P_MW,success,runtime_seconds,output_file,config_file
+15.0,0.0,10,False,0.1,,config_Ip15_P010.py
+15.0,0.0,20,False,0.1,,config_Ip15_P020.py
+15.0,0.0,30,False,0.1,,config_Ip15_P030.py
+15.0,0.0,40,False,0.1,,config_Ip15_P040.py
+15.0,0.0,50,False,0.1,,config_Ip15_P050.py
+15.0,0.0,60,False,0.1,,config_Ip15_P060.py
+15.0,0.0,70,False,0.1,,config_Ip15_P070.py
+15.0,0.0,80,False,0.1,,config_Ip15_P080.py
+15.0,0.0,90,False,0.1,,config_Ip15_P090.py
+15.0,0.0,100,False,0.1,,config_Ip15_P100.py
