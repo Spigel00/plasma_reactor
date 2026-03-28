@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plasma Run Report 20260328_092633</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --ink: #1f2937;
+      --muted: #4b5563;
+      --accent: #0f766e;
+      --border: #dbe2ea;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #edf3ff 0%, #f7fafc 100%);
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 1.8rem;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.2rem;
+    }
+    p {
+      color: var(--muted);
+      margin: 6px 0;
+    }
+    .meta {
+      display: grid;
+      gap: 6px;
+    }
+    img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Plasma Model Run Report</h1>
+      <div class="meta">
+        <p><strong>Timestamp:</strong> 20260328_092633</p>
+        <p><strong>Runner:</strong> ./venv/bin/python plasma_deployment.py</p>
+        <p><strong>Log file:</strong> <a href="../logs/plasma_run_20260328_092633.log">plasma_run_20260328_092633.log</a></p>
+        <p><strong>Plot file:</strong> <a href="../plots/plasma_control_results_20260328_092633.png">plasma_control_results_20260328_092633.png</a></p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Control Performance Plot</h2>
+      <img src="../plots/plasma_control_results_20260328_092633.png" alt="Plasma control results" />
+    </div>
+  </div>
+</body>
+</html>

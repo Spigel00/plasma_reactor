@@ -1,0 +1,298 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║        PLASMA CONTROL RL - QUICK EXECUTION CHECKLIST (PRINT THIS!)         ║
+║              Use this while running training to stay on track              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+BEFORE RUNNING TRAINING
+═══════════════════════════════════════════════════════════════════════════════
+
+☐ Open terminal #1 (main terminal for training)
+☐ Open terminal #2 (monitoring terminal)
+☐ Print or view QUICK_REFERENCE.md (for commands)
+☐ Print or view this checklist
+☐ Navigate to: /home/jiraiya_toadsage/plasma_reactor
+☐ Activate venv: source venv/bin/activate
+☐ Verify: python -c "import stable_baselines3; print('✅')"
+
+Initial Verification (Terminal #1)
+─────────────────────────────────────────────────────────────────────────────
+
+Define:
+  function check_fixes() {
+    echo "Checking action rescaling..."
+    grep -q "action_rescaled" plasma_control_env.py && echo "✓ action_rescaling" || echo "✗ MISSING"
+    
+    echo "Checking penalty reduction..."
+    grep -q "0.01 \*" plasma_control_env.py && echo "✓ penalty_reduced" || echo "✗ MISSING"
+    
+    echo "Checking learning rate..."
+    grep -q "learning_rate=1e-4" simple_plasma_training.py && echo "✓ lr_correct" || echo "✗ WRONG"
+    
+    echo "Checking steps..."
+    grep -q "100_000" simple_plasma_training.py && echo "✓ steps_ok" || echo "✗ WRONG"
+  }
+  
+Run: check_fixes()
+
+Expected output:
+  ✓ action_rescaling
+  ✓ penalty_reduced
+  ✓ lr_correct
+  ✓ steps_ok
+
+
+STARTING TRAINING
+═══════════════════════════════════════════════════════════════════════════════
+
+In Terminal #1:
+  ☐ Run: python simple_plasma_training.py
+
+Expected first lines:
+  🚀 Training Plasma Control Agent
+  =====================================
+  Creating training environment...
+
+Watch for:
+  ☐ "Training logging to:" message
+  ☐ "Starting training..." message
+  ☐ Progress bars starting
+
+
+MONITORING PROGRESS (Terminal #2)
+═══════════════════════════════════════════════════════════════════════════════
+
+☐ Minute 2-3: Check first episodes exist
+  Command: tail -5 rl_training_logs/training_monitor.csv
+  Expected: r values (reward), l values (length)
+
+☐ Minute 5-10: Check reward variation
+  Command: watch 'tail -20 rl_training_logs/training_monitor.csv'
+  Expected: r values should VARY (not all same)
+  Look for: Reward starting to increase (less negative)
+
+☐ Minute 15: Check action logging started
+  Command: ls -lh rl_training_logs/action_logging.txt
+  Expected: File exists, size > 0
+
+☐ Minute 30 (after ~50k steps): Check main metrics
+  Command: python -c "
+import pandas as pd
+df = pd.read_csv('rl_training_logs/training_monitor.csv')
+print(f'Episodes: {len(df)}')
+print(f'Reward mean (first 5): {df[\"r\"].iloc[0:5].mean():.2f}')
+print(f'Reward mean (last 5): {df[\"r\"].iloc[-5:].mean():.2f}')
+print(f'Episode length range: {df[\"l\"].min()}-{df[\"l\"].max()}')
+"
+  Expected: 
+    Episodes: 20+
+    Reward mean (first 5): -600 to -800
+    Reward mean (last 5): -400 to -500 (improving!)
+    Episode length range: 20-50 (varies!)
+
+
+MILESTONE CHECKLIST (Mark as you reach them)
+═══════════════════════════════════════════════════════════════════════════════
+
+At ~10 minutes (5,000 steps):
+  ☐ Reward CSV exists with multiple entries
+  ☐ Reward values are DIFFERENT (not constant -876.37)
+  ☐ Episode lengths vary (not always 50)
+  ☐ No error messages or crashes
+
+At ~30 minutes (50,000 steps):
+  ☐ Reward improved noticeably (50%+ better)
+  ☐ action_logging.txt has entries
+  ☐ Episode lengths typically 20-40
+  ☐ Signs of learning clear
+  ☐ Training running smoothly
+
+At ~45 minutes (75,000 steps):
+  ☐ Clear upward reward trend
+  ☐ Success bonus appearing in logs
+  ☐ Episode lengths decreasing trend
+  ☐ Still improving, halfway there
+
+At ~60 minutes (100,000 steps):
+  ☐ Training reports completion
+  ☐ Model saved to rl_models/final_plasma_model.zip
+  ☐ Total reward improvement: 88%+ (target: -876 → -100)
+  ☐ Episode length: often <30 (target variation achieved)
+
+
+QUICK DIAGNOSTICS (During Training)
+═══════════════════════════════════════════════════════════════════════════════
+
+Check 1: Is reward varying?
+  Command: tail -20 rl_training_logs/training_monitor.csv | cut -d, -f1
+  Should NOT be: -876.37, -876.37, -876.37, ...
+  Should be:     -680, -650, -600, -550, ... (varying!)
+
+Check 2: Is agent learning to solve faster?
+  Command: tail -20 rl_training_logs/training_monitor.csv | cut -d, -f2 | sort | uniq -c
+  Should show: Multiple different episode lengths (20, 25, 30, 35, 40, etc.)
+  Should NOT show: All 50
+
+Check 3: Are actions exploring full range?
+  Command: tail -100 rl_training_logs/action_logging.txt | grep "Action Statistics" -A5
+  Look for: Std values > 0.2 in all dimensions
+  Look for: Min values near -1, Max values near +1
+
+Check 4: Are reward components logged?
+  Command: tail -100 rl_training_logs/action_logging.txt | grep "reward_" 
+  Should show: shape, position, current, stability, control, success
+  Should NOT be: Empty
+
+
+TROUBLESHOOTING IF STUCK
+═══════════════════════════════════════════════════════════════════════════════
+
+Symptom: Reward still exactly -876.37 after 10k steps
+→ Action rescaling not applied
+→ Check: grep "action_rescaled" plasma_control_env.py
+→ Fix: Verify plasma_control_env.py has rescaling code
+
+Symptom: Episode always 50 steps
+→ Targets not being reached or penalty too strong
+→ Check: tail -50 rl_training_logs/action_logging.txt | grep success
+→ Fix: Verify control penalty is -0.01 and success bonus is 50.0
+
+Symptom: Training crashes
+→ Learning rate or batch size too aggressive
+→ Fix: Reduce batch_size to 128 in simple_plasma_training.py
+→ Rerun: python simple_plasma_training.py
+
+Symptom: Very slow (5k steps in 30 min)
+→ Normal on CPU, expected on GPU training
+→ Can speedup by: Reducing eval_freq from 2000 to 5000
+→ Expected: CPU ~10-15 min/50k steps, GPU ~2-3 min/50k steps
+
+
+AFTER TRAINING COMPLETE
+═══════════════════════════════════════════════════════════════════════════════
+
+☐ Check final model saved:
+  ls -lh rl_models/final_plasma_model.zip
+
+☐ Test trained model:
+  python -c "
+from stable_baselines3 import PPO
+from plasma_control_env import PlasmaControlEnv
+model = PPO.load('rl_models/final_plasma_model')
+env = PlasmaControlEnv(max_steps=50)
+obs, _ = env.reset()
+for _ in range(50):
+    action, _ = model.predict(obs, deterministic=True)
+    obs, reward, done, trunc, info = env.step(action)
+    if done or trunc: break
+print('Model loads and runs successfully!')
+"
+
+☐ Analyze results:
+  Command: python << 'EOF'
+import pandas as pd
+df = pd.read_csv('rl_training_logs/training_monitor.csv')
+print("=== Training Results ===")
+print(f"Total episodes: {len(df)}")
+print(f"Initial reward: {df['r'].iloc[0]:.2f}")
+print(f"Final reward: {df['r'].iloc[-1]:.2f}")
+print(f"Improvement: {df['r'].iloc[-1] - df['r'].iloc[0]:.2f}")
+print(f"Episode length range: {df['l'].min()}-{df['l'].max()}")
+print(f"Mean episode length: {df['l'].mean():.1f}")
+EOF
+
+Expected output similar to:
+  === Training Results ===
+  Total episodes: 150
+  Initial reward: -640.50
+  Final reward: -85.75
+  Improvement: 554.75
+  Episode length range: 15-50
+  Mean episode length: 28.5
+
+☐ Optional: Try SAC for comparison
+  Command: python train_sac.py train
+  (Takes similar time, may converge faster)
+
+
+REFERENCE COMMANDS (Copy/Paste)
+═══════════════════════════════════════════════════════════════════════════════
+
+# Activate environment
+source venv/bin/activate
+
+# Start training
+python simple_plasma_training.py
+
+# Monitor in real-time (Terminal #2)
+watch 'tail -10 rl_training_logs/training_monitor.csv'
+
+# Show just reward column
+watch 'tail -10 rl_training_logs/training_monitor.csv | cut -d, -f1'
+
+# Check action logging exists
+tail -50 rl_training_logs/action_logging.txt
+
+# Quick stats during training
+python -c "
+import pandas as pd
+df = pd.read_csv('rl_training_logs/training_monitor.csv')
+print(f'Latest: {df[\"r\"].iloc[-1]:.0f}  |  Range: [{df[\"r\"].min():.0f}, {df[\"r\"].max():.0f}]  |  Episodes: {len(df)}')
+"
+
+# Start SAC training (after PPO finishes)
+python train_sac.py train
+
+# View TensorBoard (after training started)
+tensorboard --logdir rl_training_logs/tensorboard &
+# Open http://localhost:6006 in browser
+
+
+SUCCESS CRITERIA
+═══════════════════════════════════════════════════════════════════════════════
+
+At minimum (50k steps):
+  ☑ Reward varies (not constant)
+  ☑ Episode length varies (not always 50)
+  ☑ Reward improved 50%+ from start
+
+Good (100k steps):
+  ☑ Reward improved 80%+
+  ☑ Episodes regularly 20-40 steps
+  ☑ Action logging shows exploration
+  ☑ Training logs look healthy
+
+Excellent (100k+ steps):
+  ☑ Reward improved 90%+ 
+  ☑ Clear success episodes in logs
+  ☑ SAC converges faster than PPO
+  ☑ Models saved and loadable
+
+
+FINAL STATUS CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+After training completes, verify:
+  ☐ rl_models/final_plasma_model.zip exists
+  ☐ rl_training_logs/training_monitor.csv has 100+ episodes
+  ☐ rl_training_logs/eval_monitor.csv has evaluations
+  ☐ rl_training_logs/action_logging.txt has entries
+  ☐ Reward shows clear improvement trend
+  ☐ No NaN or Inf values in CSVs
+  ☐ Model can be loaded without errors
+  ☐ No crashes or warnings
+
+If all checked → ✅ **SUCCESS!**
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Start time: _________________
+Expected end time: __________ (60 min from start)
+
+Notes/Observations:
+_____________________________________________________________________
+_____________________________________________________________________
+_____________________________________________________________________
+
+═══════════════════════════════════════════════════════════════════════════════
+Print this page and check off items as you go!
+═══════════════════════════════════════════════════════════════════════════════

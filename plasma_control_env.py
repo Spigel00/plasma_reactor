@@ -53,12 +53,17 @@ class PlasmaControlEnv(gym.Env):
         self.target_Z_centroid = 0.0   # meters (centered)
         self.target_Ip = 15.0          # MA
         
-        # Define action space: 4 coil currents [5-15 kA]
+        # Define action space: 4 coil currents normalized to [-1, 1]
+        # These will be rescaled to [5-15 kA] in step()
         self.action_space = spaces.Box(
-            low=np.array([5.0, 5.0, 5.0, 5.0]),    # Minimum coil currents
-            high=np.array([15.0, 15.0, 15.0, 15.0]), # Maximum coil currents
+            low=np.array([-1.0, -1.0, -1.0, -1.0]),  # Normalized minimum
+            high=np.array([1.0, 1.0, 1.0, 1.0]),    # Normalized maximum
             dtype=np.float32
         )
+        
+        # Action rescaling parameters
+        self.action_low = 5.0   # kA
+        self.action_high = 15.0  # kA
         
         # Define observation space: 8 plasma observables
         # ['R_centroid', 'Z_centroid', 'elongation', 'triangularity', 'Te_avg', 'ne_avg', 'Ip', 'q95']
@@ -103,7 +108,7 @@ class PlasmaControlEnv(gym.Env):
         Execute one step in the environment.
         
         Args:
-            action: Array of 4 coil currents [kA]
+            action: Array of 4 normalized coil currents [-1, 1]
             
         Returns:
             observation: New plasma state
@@ -112,30 +117,37 @@ class PlasmaControlEnv(gym.Env):
             truncated: Whether episode was truncated
             info: Additional information
         """
-        # Clip action to valid range
-        action = np.clip(action, 5.0, 15.0)
-        self.current_coils = action
+        # Normalize action from [-1, 1] to [5, 15] kA
+        action = np.clip(action, -1.0, 1.0)
+        action_rescaled = self.action_low + (action + 1.0) / 2.0 * (self.action_high - self.action_low)
+        self.current_coils = action_rescaled
         
         # Use surrogate model to predict new plasma state
-        plasma_responses = self.surrogate.predict(action)
+        plasma_responses = self.surrogate.predict(action_rescaled)
         
         # Convert to observation
         self.state = self._responses_to_observation(plasma_responses)
         
-        # Calculate reward
-        reward = self._calculate_reward(plasma_responses, action)
+        # Calculate reward with per-component tracking
+        reward, reward_components = self._calculate_reward(plasma_responses, action_rescaled)
         
         # Check if episode is done
         self.current_step += 1
         terminated = self._is_terminated(plasma_responses)
         truncated = self.current_step >= self.max_steps
         
-        # Additional info for debugging
+        # Additional info for debugging with per-component rewards
         info = {
-            'coil_currents': action.copy(),
+            'coil_currents': action_rescaled.copy(),
             'plasma_responses': plasma_responses.copy(),
             'step': self.current_step,
-            'targets_met': self._check_targets(plasma_responses)
+            'targets_met': self._check_targets(plasma_responses),
+            'reward_shape': reward_components['shape'],
+            'reward_position': reward_components['position'],
+            'reward_current': reward_components['current'],
+            'reward_stability': reward_components['stability'],
+            'reward_control': reward_components['control'],
+            'reward_success': reward_components['success']
         }
         
         return self.state.astype(np.float32), reward, terminated, truncated, info
@@ -157,15 +169,17 @@ class PlasmaControlEnv(gym.Env):
         
     def _calculate_reward(self, plasma_responses, action):
         """
-        Calculate reward based on plasma performance.
+        Calculate reward based on plasma performance with per-component logging.
         
         Reward components:
         1. Shape control (elongation, triangularity)
-        2. Position control (R, Z centroids)  
+        2. Position control (R, Z centroids)
         3. Performance (current, temperature)
         4. Stability (q95, avoid disruptions)
         5. Control efficiency (penalize extreme coil currents)
+        6. Success bonus
         """
+        reward_components = {}
         reward = 0.0
         
         # 1. Shape control rewards (primary objective)
@@ -173,6 +187,7 @@ class PlasmaControlEnv(gym.Env):
         triangularity_error = abs(plasma_responses['triangularity'] - self.target_triangularity)
         
         shape_reward = 10.0 * (2.0 - elongation_error - triangularity_error)  # Max +20 points
+        reward_components['shape'] = shape_reward
         reward += shape_reward
         
         # 2. Position control rewards  
@@ -180,11 +195,13 @@ class PlasmaControlEnv(gym.Env):
         Z_error = abs(plasma_responses['Z_centroid'] - self.target_Z_centroid)
         
         position_reward = 5.0 * (1.0 - R_error - 2.0 * Z_error)  # Max +5 points
+        reward_components['position'] = position_reward
         reward += position_reward
         
         # 3. Performance rewards
         Ip_error = abs(plasma_responses['Ip'] - self.target_Ip) / self.target_Ip
         performance_reward = 5.0 * (1.0 - Ip_error)  # Max +5 points
+        reward_components['current'] = performance_reward
         reward += performance_reward
         
         # 4. Stability rewards (q95 should be > 2 for stability)
@@ -193,19 +210,24 @@ class PlasmaControlEnv(gym.Env):
             stability_reward = 2.0
         else:
             stability_reward = -10.0 * (2.0 - q95)  # Penalty for low q95
+        reward_components['stability'] = stability_reward
         reward += stability_reward
         
-        # 5. Control efficiency (penalize extreme coil currents)
-        control_penalty = 0.1 * np.sum((action - 10.0)**2)  # Prefer moderate currents
-        reward -= control_penalty
+        # 5. Control efficiency (penalize extreme coil currents) - REDUCED from 0.1 to 0.01
+        control_penalty = -0.01 * np.sum((action - 10.0)**2)  # Prefer moderate currents
+        reward_components['control'] = control_penalty
+        reward += control_penalty
         
-        # 6. Bonus for meeting all targets simultaneously
+        # 6. Success bonus for meeting all targets simultaneously
+        success_reward = 0.0
         if (elongation_error < 0.1 and triangularity_error < 0.05 and 
             R_error < 0.02 and Z_error < 0.02 and Ip_error < 0.05):
-            reward += 20.0  # Big bonus for excellent control
+            success_reward = 50.0  # Significant bonus for excellent control
+        reward_components['success'] = success_reward
+        reward += success_reward
             
-        return reward
-    
+        return reward, reward_components
+
     def _is_terminated(self, plasma_responses):
         """Check if episode should terminate (plasma disruption)."""
         # Terminate if plasma goes outside safe operating limits

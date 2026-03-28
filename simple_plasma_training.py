@@ -12,10 +12,93 @@ from pathlib import Path
 # RL imports
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import EvalCallback, BaseCallback
 
 # Our environment
 from plasma_control_env import PlasmaControlEnv
+
+
+class ActionLoggingCallback(BaseCallback):
+    """Custom callback to log action statistics and reward components during training."""
+    
+    def __init__(self, log_dir, n_eval_episodes=5):
+        super(ActionLoggingCallback, self).__init__()
+        self.log_dir = Path(log_dir)
+        self.log_file = self.log_dir / "action_logging.txt"
+        self.n_eval_episodes = n_eval_episodes
+        self.last_log_step = 0
+        self.probe_env = None
+        
+    def _on_step(self) -> bool:
+        """Called after every environment step."""
+        return True
+    
+    def _on_training_start(self) -> None:
+        """Called when training starts."""
+        # Use a standalone gym environment for logging rollouts.
+        # self.training_env is a VecEnv and has different reset/step signatures.
+        self.probe_env = PlasmaControlEnv(max_steps=50)
+        print(f"Training logging to: {self.log_file}")
+    
+    def _on_rollout_end(self) -> None:
+        """Called after each rollout."""
+        if self.num_timesteps - self.last_log_step >= 5000:  # Log every 5k steps
+            self.last_log_step = self.num_timesteps
+            
+            # Log current policy statistics
+            with open(self.log_file, 'a') as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"Timestep: {self.num_timesteps}\n")
+                f.write(f"{'='*60}\n")
+                
+                # Get action statistics from a sample rollout
+                env = self.probe_env
+                obs, info = env.reset()
+                episode_actions = []
+                episode_rewards = []
+                reward_components = {'shape': [], 'position': [], 'current': [], 
+                                   'stability': [], 'control': [], 'success': []}
+                
+                for step in range(50):
+                    action, _states = self.model.predict(obs, deterministic=False)
+                    obs, reward, terminated, truncated, info = env.step(action)
+                    
+                    episode_actions.append(action)
+                    episode_rewards.append(reward)
+                    
+                    # Extract reward components
+                    for key in reward_components:
+                        if f'reward_{key}' in info:
+                            reward_components[key].append(info[f'reward_{key}'])
+                    
+                    if terminated or truncated:
+                        break
+                
+                episode_actions = np.array(episode_actions)
+                episode_rewards = np.array(episode_rewards)
+                
+                # Write statistics
+                f.write(f"\nAction Statistics (normalized [-1, 1]):\n")
+                f.write(f"  Mean: [{episode_actions.mean(axis=0).tolist()}]\n")
+                f.write(f"  Std:  [{episode_actions.std(axis=0).tolist()}]\n")
+                f.write(f"  Min:  [{episode_actions.min(axis=0).tolist()}]\n")
+                f.write(f"  Max:  [{episode_actions.max(axis=0).tolist()}]\n")
+                f.write(f"\nReward Statistics:\n")
+                f.write(f"  Episode Total: {episode_rewards.sum():.2f}\n")
+                f.write(f"  Episode Mean: {episode_rewards.mean():.2f}\n")
+                f.write(f"  Episode Std: {episode_rewards.std():.2f}\n")
+                
+                for key, values in reward_components.items():
+                    if values:
+                        f.write(f"  {key:12s}: mean={np.mean(values):7.3f} std={np.std(values):7.3f}\n")
+                
+                print(f"  [Step {self.num_timesteps}] Logged action/reward statistics")
+
+    def _on_training_end(self) -> None:
+        """Called when training ends."""
+        if self.probe_env is not None:
+            self.probe_env.close()
+            self.probe_env = None
 
 
 def train_plasma_controller():
@@ -45,14 +128,14 @@ def train_plasma_controller():
     model = PPO(
         "MlpPolicy",                # Multi-layer perceptron policy
         train_env,
-        learning_rate=3e-4,         # Learning rate
-        n_steps=1024,               # Steps to collect before update  
-        batch_size=64,              # Batch size for training
+        learning_rate=1e-4,         # Reduced learning rate for stability
+        n_steps=2048,               # Increased steps to collect before update
+        batch_size=256,             # Increased batch size
         n_epochs=10,                # Training epochs per update
         gamma=0.99,                 # Discount factor
         gae_lambda=0.95,            # GAE parameter
         clip_range=0.2,             # PPO clipping range
-        ent_coef=0.01,              # Entropy coefficient (exploration)
+        ent_coef=0.05,              # Increased entropy coefficient for exploration
         vf_coef=0.5,                # Value function coefficient
         verbose=1,                  # Print training progress
         tensorboard_log=str(log_dir / "tensorboard")
@@ -69,14 +152,17 @@ def train_plasma_controller():
         n_eval_episodes=5
     )
     
+    # Setup action logging callback
+    action_callback = ActionLoggingCallback(log_dir)
+    
     # Train the agent
     print("Starting training...")
     print("This will take a few minutes - watch the reward improve!")
     print("-" * 40)
     
     model.learn(
-        total_timesteps=20000,      # Total training steps
-        callback=eval_callback,
+        total_timesteps=100_000,    # Increased total training steps
+        callback=[eval_callback, action_callback],
         tb_log_name="plasma_ppo"
     )
     
